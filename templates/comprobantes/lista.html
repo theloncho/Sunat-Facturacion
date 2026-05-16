@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Comprobantes — FacturaSUNAT{% endblock %}
+{% block page_title %}<i class="bi bi-list-ul me-2"></i>Lista de Comprobantes{% endblock %}
+
+{% block content %}
+<!-- Filtros -->
+<div class="stat-card mb-4 no-print">
+  <form method="get" class="row g-3">
+    <div class="col-md-2">
+      <label class="form-label">Tipo</label>
+      <select name="tipo" class="form-select">
+        <option value="">Todos</option>
+        <option value="FACTURA" {% if filtros.tipo == 'FACTURA' %}selected{% endif %}>Factura</option>
+        <option value="BOLETA" {% if filtros.tipo == 'BOLETA' %}selected{% endif %}>Boleta</option>
+        <option value="NOTA_CREDITO" {% if filtros.tipo == 'NOTA_CREDITO' %}selected{% endif %}>Nota Crédito</option>
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Estado</label>
+      <select name="estado" class="form-select">
+        <option value="">Todos</option>
+        <option value="ACEPTADO" {% if filtros.estado == 'ACEPTADO' %}selected{% endif %}>Aceptado</option>
+        <option value="RECHAZADO" {% if filtros.estado == 'RECHAZADO' %}selected{% endif %}>Rechazado</option>
+        <option value="ENVIADO" {% if filtros.estado == 'ENVIADO' %}selected{% endif %}>Enviado</option>
+        <option value="EMITIDO" {% if filtros.estado == 'EMITIDO' %}selected{% endif %}>Emitido</option>
+        <option value="BORRADOR" {% if filtros.estado == 'BORRADOR' %}selected{% endif %}>Borrador</option>
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Desde</label>
+      <input type="date" name="fecha_desde" class="form-control" value="{{ filtros.fecha_desde|default:'' }}">
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Hasta</label>
+      <input type="date" name="fecha_hasta" class="form-control" value="{{ filtros.fecha_hasta|default:'' }}">
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Buscar</label>
+      <input type="text" name="buscar" class="form-control" placeholder="Cliente, RUC, Serie..." value="{{ filtros.buscar|default:'' }}">
+    </div>
+    <div class="col-md-1 d-flex align-items-end">
+      <button type="submit" class="btn btn-primary-custom w-100"><i class="bi bi-search"></i></button>
+    </div>
+  </form>
+</div>
+
+<!-- Tabla -->
+<div class="table-responsive">
+  <table class="table table-dark-custom">
+    <thead>
+      <tr>
+        <th>Serie-Número</th>
+        <th>Tipo</th>
+        <th>Fecha</th>
+        <th>Cliente</th>
+        <th>RUC/DNI</th>
+        <th class="text-end">Total</th>
+        <th>Estado SUNAT</th>
+        <th>Acciones</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in comprobantes %}
+      <tr>
+        <td><strong>{{ c.serie_numero }}</strong></td>
+        <td>{{ c.get_tipo_display }}</td>
+        <td>{{ c.fecha_emision }}</td>
+        <td>{{ c.cliente.razon_social|truncatechars:25 }}</td>
+        <td>{{ c.cliente.num_doc }}</td>
+        <td class="text-end"><strong>S/.{{ c.total|floatformat:2 }}</strong></td>
+        <td>
+          <span class="badge-estado badge-{{ c.estado|lower }}">{{ c.get_estado_display }}</span>
+        </td>
+        <td>
+          <div class="btn-group btn-group-sm">
+            <a href="{% url 'comprobante-detalle' c.pk %}" class="btn btn-outline-custom" title="Ver"><i class="bi bi-eye"></i></a>
+            <a href="{% url 'comprobante-pdf' c.pk %}" class="btn btn-outline-custom" target="_blank" title="PDF"><i class="bi bi-file-pdf"></i></a>
+            {% if c.estado == 'RECHAZADO' %}
+            <a href="{% url 'comprobante-reenviar' c.pk %}" class="btn btn-outline-custom" title="Reenviar" onclick="return confirm('¿Reenviar?')"><i class="bi bi-arrow-repeat"></i></a>
+            {% endif %}
+          </div>
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="8" class="text-center py-4 text-secondary">No se encontraron comprobantes.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

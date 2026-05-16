@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Perfil — FacturaSUNAT{% endblock %}
+{% block page_title %}Mi Perfil{% endblock %}
+{% block content %}
+<div class="row">
+  <div class="col-md-6">
+    <div class="stat-card">
+      <h5><i class="bi bi-person-circle me-2"></i>Información del Usuario</h5>
+      <hr style="border-color:var(--border-color);">
+      <table class="table table-borderless" style="color:var(--text-primary);">
+        <tr><td class="text-secondary">Usuario:</td><td>{{ request.user.username }}</td></tr>
+        <tr><td class="text-secondary">Nombre:</td><td>{{ request.user.get_full_name|default:"—" }}</td></tr>
+        <tr><td class="text-secondary">Email:</td><td>{{ request.user.email|default:"—" }}</td></tr>
+        <tr><td class="text-secondary">Rol:</td><td><span class="badge badge-estado badge-emitido">{{ request.user.rol }}</span></td></tr>
+        <tr><td class="text-secondary">Empresa:</td><td>{{ request.user.empresa|default:"Sin asignar" }}</td></tr>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Productos — FacturaSUNAT{% endblock %}
+{% block page_title %}<i class="bi bi-box-seam me-2"></i>Productos y Servicios{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <form method="get" class="d-flex gap-2" style="max-width:400px;">
+    <input type="text" name="q" class="form-control" placeholder="Buscar por código o descripción..." value="{{ q }}">
+    <button class="btn btn-primary-custom"><i class="bi bi-search"></i></button>
+  </form>
+  <div class="d-flex gap-2">
+    <button type="button" class="btn btn-outline-custom" data-bs-toggle="modal" data-bs-target="#importExcelModal">
+      <i class="bi bi-file-earmark-excel me-2" style="color: #10b981;"></i>Importar Excel
+    </button>
+    <a href="{% url 'producto-crear' %}" class="btn btn-success-custom"><i class="bi bi-plus me-2"></i>Nuevo Producto</a>
+  </div>
+</div>
+<div class="table-responsive">
+  <table class="table table-azul-claro">
+    <thead><tr><th>Código</th><th>Descripción</th><th>Unidad</th><th class="text-end">Precio Unit.</th><th>IGV</th><th>Estado</th><th>Acciones</th></tr></thead>
+    <tbody>
+      {% for p in productos %}
+      <tr>
+        <td><strong>{{ p.codigo }}</strong></td>
+        <td>{{ p.descripcion }}</td>
+        <td>{{ p.get_unidad_medida_display }}</td>
+        <td class="text-end">S/.{{ p.precio_unitario|floatformat:2 }}</td>
+        <td>{% if p.afecto_igv %}<span class="badge badge-estado badge-aceptado">Afecto</span>{% else %}<span class="badge badge-estado badge-borrador">Inafecto</span>{% endif %}</td>
+        <td><span class="badge badge-estado {% if p.activo %}badge-aceptado{% else %}badge-rechazado{% endif %}">{% if p.activo %}Activo{% else %}Inactivo{% endif %}</span></td>
+        <td>
+          <div class="btn-group btn-group-sm">
+            <a href="{% url 'producto-editar' p.pk %}" class="btn btn-outline-custom"><i class="bi bi-pencil"></i></a>
+            <form method="post" action="{% url 'producto-eliminar' p.pk %}" class="d-inline" onsubmit="return confirm('¿Desactivar producto?')">
+              {% csrf_token %}
+              <button class="btn btn-outline-custom" style="color:var(--danger);"><i class="bi bi-trash"></i></button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="7" class="text-center py-4 text-secondary">No hay productos registrados.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Modal de Importación de Excel -->
+<div class="modal fade" id="importExcelModal" tabindex="-1" aria-labelledby="importExcelModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content" style="background: #0f172a; border: 1px solid rgba(255,255,255,0.1); border-radius: 1rem; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5);">
+      <form method="post" action="{% url 'producto-importar' %}" enctype="multipart/form-data">
+        {% csrf_token %}
+        <div class="modal-header" style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+          <h5 class="modal-title" id="importExcelModalLabel"><i class="bi bi-file-earmark-excel me-2" style="color: #10b981;"></i>Importar Productos desde Excel</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body p-4">
+          <p class="text-secondary mb-3" style="font-size: 0.9rem;">
+            Sube un archivo de Excel (<strong>.xlsx</strong> o <strong>.xls</strong>) con cualquier estructura o columnas adicionales. El sistema detectará automáticamente en la primera fila (cabeceras en cualquier orden) y <strong>solo extraerá</strong> los siguientes apartados:
+          </p>
+          <div class="table-responsive mb-3">
+            <table class="table table-sm style-table" style="font-size: 0.8rem; border: 1px solid rgba(255,255,255,0.05);">
+              <thead>
+                <tr style="background: rgba(255,255,255,0.05);">
+                  <th style="padding: 0.5rem;">codigo</th>
+                  <th style="padding: 0.5rem;">descripcion</th>
+                  <th style="padding: 0.5rem;">unidad_medida</th>
+                  <th style="padding: 0.5rem;">precio_unitario</th>
+                  <th style="padding: 0.5rem;">afecto_igv</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="text-secondary" style="padding: 0.5rem;">PROD001</td>
+                  <td class="text-secondary" style="padding: 0.5rem;">Laptop Core i7</td>
+                  <td class="text-secondary" style="padding: 0.5rem;">NIU</td>
+                  <td class="text-secondary" style="padding: 0.5rem;">3500.00</td>
+                  <td class="text-secondary" style="padding: 0.5rem;">SI</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="alert alert-custom alert-info mb-4" style="font-size: 0.8rem; padding: 0.75rem;">
+            <i class="bi bi-info-circle me-2"></i>Si un código de producto ya existe en el sistema, se actualizarán sus datos automáticamente.
+          </div>
+          <div class="mb-3">
+            <label for="excel_file" class="form-label">Archivo Excel</label>
+            <input class="form-control" type="file" id="excel_file" name="excel_file" accept=".xlsx,.xls" required style="background: rgba(0,0,0,0.2); border-color: rgba(255,255,255,0.1); color: #fff;">
+          </div>
+        </div>
+        <div class="modal-footer" style="border-top: 1px solid rgba(255,255,255,0.05);">
+          <button type="button" class="btn btn-outline-custom" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-success-custom"><i class="bi bi-cloud-upload me-2"></i>Subir e Importar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}{{ titulo }} — FacturaSUNAT{% endblock %}
+{% block page_title %}<i class="bi bi-box me-2"></i>{{ titulo }}{% endblock %}
+{% block content %}
+<div class="row">
+  <div class="col-md-8">
+    <div class="stat-card">
+      <form method="post">
+        {% csrf_token %}
+        {% for field in form %}
+        <div class="mb-3 {% if field.name in 'afecto_igv,activo' %}form-check form-switch{% endif %}">
+          {% if field.name in 'afecto_igv,activo' %}
+            {{ field }}
+            <label class="form-check-label ms-2">{{ field.label }}</label>
+          {% else %}
+            <label class="form-label">{{ field.label }}</label>
+            {{ field }}
+          {% endif %}
+          {% if field.errors %}<div class="text-danger mt-1" style="font-size:0.8rem;">{{ field.errors.0 }}</div>{% endif %}
+        </div>
+        {% endfor %}
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-primary-custom"><i class="bi bi-check-lg me-2"></i>Guardar</button>
+          <a href="{% url 'producto-lista' %}" class="btn btn-outline-custom">Cancelar</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

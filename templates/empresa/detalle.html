@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}{{ empresa.razon_social }} — FacturaSUNAT{% endblock %}
+{% block page_title %}<i class="bi bi-building me-2"></i>{{ empresa.razon_social }}{% endblock %}
+{% block content %}
+<div class="row g-4">
+  <div class="col-md-5">
+    <div class="stat-card">
+      <h5><i class="bi bi-info-circle me-2"></i>Datos Fiscales</h5>
+      <hr style="border-color:var(--border-color);">
+      <table class="table table-borderless" style="color:var(--text-primary);">
+        <tr><td class="text-secondary">RUC:</td><td><span class="badge badge-estado badge-emitido">{{ empresa.ruc }}</span></td></tr>
+        <tr><td class="text-secondary">Razón Social:</td><td><strong>{{ empresa.razon_social }}</strong></td></tr>
+        <tr><td class="text-secondary">Nombre Comercial:</td><td>{{ empresa.nombre_comercial|default:"—" }}</td></tr>
+        <tr><td class="text-secondary">Dirección:</td><td>{{ empresa.direccion }}</td></tr>
+        <tr><td class="text-secondary">Régimen:</td><td><span class="badge bg-secondary">{{ empresa.get_regimen_tributario_display }}</span></td></tr>
+      </table>
+      {% if request.user.rol == 'ADMIN' %}
+      <a href="{% url 'empresa-editar' empresa.pk %}" class="btn btn-primary-custom btn-sm"><i class="bi bi-pencil me-1"></i>Editar Datos</a>
+      {% endif %}
+    </div>
+  </div>
+  <div class="col-md-7">
+    <div class="stat-card">
+      <h5><i class="bi bi-123 me-2"></i>Series de Numeración Configuradas</h5>
+      <hr style="border-color:var(--border-color);">
+      <div class="table-responsive">
+        <table class="table table-dark-custom">
+          <thead>
+            <tr>
+              <th>Tipo</th>
+              <th>Serie</th>
+              <th>Correlativo Actual</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for s in empresa.series.all %}
+            <tr>
+              <td>{{ s.get_tipo_display }}</td>
+              <td><strong style="color:var(--accent);">{{ s.serie }}</strong></td>
+              <td>#{{ s.correlativo_actual }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="3" class="text-center text-secondary py-3">No hay series configuradas para esta empresa.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <small class="text-secondary d-block mt-2"><i class="bi bi-shield-lock me-1"></i>Las series correlativas aseguran numeración secuencial sin saltos garantizada a nivel de base de datos.</small>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}Nota de Crédito — FacturaSUNAT{% endblock %}
+{% block page_title %}<i class="bi bi-arrow-return-left me-2"></i>Emitir Nota de Crédito{% endblock %}
+
+{% block content %}
+<div x-data="notaCreditoForm()" class="fade-in-up">
+  <div class="row g-4">
+    <div class="col-md-7">
+      <div class="stat-card">
+        <h5 class="mb-3">Buscar Comprobante Original</h5>
+        <div class="mb-3">
+          <label class="form-label">Serie-Número</label>
+          <div class="input-group">
+            <input type="text" class="form-control" placeholder="Ej: F001-00001" x-model="serieNumero">
+            <button class="btn btn-primary-custom" @click="buscarComprobante()">
+              <i class="bi bi-search me-1"></i>Buscar
+            </button>
+          </div>
+        </div>
+
+        <!-- Comprobante encontrado -->
+        <div x-show="compRef" class="p-3 rounded-3 mb-3" style="background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.2);">
+          <h6><i class="bi bi-check-circle" style="color:var(--success);"></i> Comprobante Encontrado</h6>
+          <div class="row">
+            <div class="col-4"><small class="text-secondary">Serie-Número</small><br><strong x-text="compRef?.serie_numero"></strong></div>
+            <div class="col-4"><small class="text-secondary">Tipo</small><br><span x-text="compRef?.tipo"></span></div>
+            <div class="col-4"><small class="text-secondary">Total</small><br><strong style="color:var(--accent);" x-text="'S/.' + (compRef?.total || '0')"></strong></div>
+          </div>
+          <div class="mt-2"><small class="text-secondary">Cliente:</small> <span x-text="compRef?.cliente"></span></div>
+        </div>
+
+        <div x-show="compRef">
+          <div class="mb-3">
+            <label class="form-label">Tipo de Nota</label>
+            <select class="form-select" x-model="tipoNota">
+              <option value="01">Anulación de la operación</option>
+              <option value="02">Anulación por error en el RUC</option>
+              <option value="03">Corrección por error en la descripción</option>
+              <option value="04">Descuento global</option>
+              <option value="06">Devolución total</option>
+              <option value="07">Devolución por ítem</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Motivo</label>
+            <textarea class="form-control" rows="3" x-model="motivo" placeholder="Describa el motivo de la nota de crédito..."></textarea>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Monto Afectado (S/.)</label>
+            <input type="number" class="form-control" x-model.number="montoAfectado" step="0.01" min="0.01" :max="compRef?.total">
+            <small class="text-secondary">Máximo: S/.<span x-text="compRef?.total || '0'"></span></small>
+          </div>
+          <button class="btn btn-primary-custom" @click="emitirNC()" :disabled="emitiendo">
+            <span x-show="!emitiendo"><i class="bi bi-send me-2"></i>Emitir Nota de Crédito</span>
+            <span x-show="emitiendo"><span class="spinner-border spinner-border-sm me-2"></span>Procesando...</span>
+          </button>
+        </div>
+
+        <div x-show="error" class="alert alert-danger mt-3"><i class="bi bi-exclamation-triangle me-2"></i><span x-text="error"></span></div>
+        <div x-show="exito" class="alert-custom mt-3 p-3 rounded-3">
+          <i class="bi bi-check-circle-fill text-success me-2"></i><strong x-text="exito"></strong>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-5">
+      <div class="stat-card">
+        <h5><i class="bi bi-question-circle me-2"></i>¿Qué es una Nota de Crédito?</h5>
+        <p class="text-secondary" style="font-size:0.85rem;">
+          La nota de crédito es un documento tributario que modifica o anula un comprobante de pago emitido previamente.
+          Se usa para corregir errores, aplicar descuentos o registrar devoluciones.
+        </p>
+        <h6>Reglas:</h6>
+        <ul class="text-secondary" style="font-size:0.85rem;">
+          <li>El monto no puede superar el total del comprobante original.</li>
+          <li>Solo se pueden emitir NC para comprobantes ACEPTADOS o EMITIDOS.</li>
+          <li>Genera un nuevo comprobante tipo NOTA_CREDITO.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+window.notaCreditoForm = function() {
+  return {
+    serieNumero: '', compRef: null, tipoNota: '01', motivo: '', montoAfectado: 0,
+    emitiendo: false, error: '', exito: '',
+
+    async buscarComprobante() {
+      this.error = ''; this.compRef = null;
+      const res = await fetch(`/api/internal/buscar-comprobante/?q=${encodeURIComponent(this.serieNumero)}`);
+      const data = await res.json();
+      if (data.found) { this.compRef = data; this.montoAfectado = parseFloat(data.total); }
+      else { this.error = 'Comprobante no encontrado.'; }
+    },
+
+    async emitirNC() {
+      this.emitiendo = true; this.error = ''; this.exito = '';
+      try {
+        const res = await fetch('/comprobantes/nota-credito/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.cookie.match(/csrftoken=([^;]+)/)?.[1] },
+          body: JSON.stringify({
+            comprobante_referencia_id: this.compRef.id,
+            motivo: this.motivo, tipo_nota: this.tipoNota, monto_afectado: this.montoAfectado,
+          }),
+        });
+        const data = await res.json();
+        if (data.success) { this.exito = data.message; }
+        else { this.error = data.error; }
+      } catch (e) { this.error = 'Error de conexión.'; }
+      this.emitiendo = false;
+    },
+  };
+}
+</script>
+{% endblock %}

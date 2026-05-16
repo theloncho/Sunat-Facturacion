@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}{{ titulo }} — FacturaSUNAT{% endblock %}
+{% block page_title %}<i class="bi bi-building-add me-2"></i>{{ titulo }}{% endblock %}
+{% block content %}
+<div class="row">
+  <div class="col-md-8">
+    <div class="stat-card">
+      <form method="post">
+        {% csrf_token %}
+        
+        <div class="mb-3">
+          <label class="form-label">{{ form.ruc.label }}</label>
+          <div class="input-group">
+            {{ form.ruc }}
+            <button class="btn btn-outline-custom" type="button" id="btn-buscar-ruc" title="Consultar RUC en SUNAT">
+              <i class="bi bi-search" id="search-icon-ruc"></i>
+              <span class="spinner-border spinner-border-sm d-none" id="search-spinner-ruc" role="status" aria-hidden="true"></span>
+            </button>
+          </div>
+          <small class="text-secondary mt-1 d-block">Ingrese el RUC de 11 dígitos y haga clic en buscar para autocompletar.</small>
+          {% if form.ruc.errors %}
+          <div class="text-danger mt-1" style="font-size:0.8rem;">{{ form.ruc.errors.0 }}</div>
+          {% endif %}
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">{{ form.razon_social.label }}</label>
+          {{ form.razon_social }}
+          {% if form.razon_social.errors %}
+          <div class="text-danger mt-1" style="font-size:0.8rem;">{{ form.razon_social.errors.0 }}</div>
+          {% endif %}
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">{{ form.nombre_comercial.label }}</label>
+          {{ form.nombre_comercial }}
+          {% if form.nombre_comercial.errors %}
+          <div class="text-danger mt-1" style="font-size:0.8rem;">{{ form.nombre_comercial.errors.0 }}</div>
+          {% endif %}
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">{{ form.direccion.label }}</label>
+          {{ form.direccion }}
+          {% if form.direccion.errors %}
+          <div class="text-danger mt-1" style="font-size:0.8rem;">{{ form.direccion.errors.0 }}</div>
+          {% endif %}
+        </div>
+
+        <div class="mb-4">
+          <label class="form-label">{{ form.regimen_tributario.label }}</label>
+          {{ form.regimen_tributario }}
+          <small class="text-secondary mt-1 d-block">Seleccione manualmente el régimen aplicable.</small>
+          {% if form.regimen_tributario.errors %}
+          <div class="text-danger mt-1" style="font-size:0.8rem;">{{ form.regimen_tributario.errors.0 }}</div>
+          {% endif %}
+        </div>
+
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-primary-custom"><i class="bi bi-check-lg me-2"></i>Guardar</button>
+          <a href="{% url 'empresa-lista' %}" class="btn btn-outline-custom">Cancelar</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const btnBuscar = document.getElementById('btn-buscar-ruc');
+    const inputRuc = document.querySelector('[name="ruc"]');
+    const inputRazonSocial = document.querySelector('[name="razon_social"]');
+    const inputNombreComercial = document.querySelector('[name="nombre_comercial"]');
+    const inputDireccion = document.querySelector('[name="direccion"]');
+    const searchIcon = document.getElementById('search-icon-ruc');
+    const searchSpinner = document.getElementById('search-spinner-ruc');
+
+    if (btnBuscar && inputRuc) {
+        btnBuscar.addEventListener('click', function() {
+            const ruc = inputRuc.value.trim();
+
+            if (!ruc || ruc.length !== 11) {
+                alert('Por favor ingrese un RUC válido de 11 dígitos.');
+                return;
+            }
+
+            btnBuscar.disabled = true;
+            searchIcon.classList.add('d-none');
+            searchSpinner.classList.remove('d-none');
+
+            // Usamos la misma proxy interna con tipo=RUC
+            fetch(`/clientes/api/internal/consultar-doc/?tipo=RUC&numero=${ruc}`)
+                .then(response => response.json())
+                .then(res => {
+                    btnBuscar.disabled = false;
+                    searchIcon.classList.remove('d-none');
+                    searchSpinner.classList.add('d-none');
+
+                    if (res.success && res.data) {
+                        const d = res.data;
+                        if (d.ruc) {
+                            if (inputRazonSocial && d.razonSocial) inputRazonSocial.value = d.razonSocial;
+                            if (inputNombreComercial && d.nombreComercial && d.nombreComercial !== '-') inputNombreComercial.value = d.nombreComercial;
+                            if (inputDireccion && d.direccion) inputDireccion.value = d.direccion;
+                        } else {
+                            alert('La consulta no devolvió datos válidos para el RUC.');
+                        }
+                    } else {
+                        alert(res.message || 'No se encontró información para el RUC ingresado.');
+                    }
+                })
+                .catch(err => {
+                    btnBuscar.disabled = false;
+                    searchIcon.classList.remove('d-none');
+                    searchSpinner.classList.add('d-none');
+                    alert('Error de conexión al consultar el RUC.');
+                });
+        });
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}{{ cliente.razon_social }} — FacturaSUNAT{% endblock %}
+{% block page_title %}<i class="bi bi-person me-2"></i>{{ cliente.razon_social }}{% endblock %}
+{% block content %}
+<div class="row g-4">
+  <div class="col-md-5">
+    <div class="stat-card">
+      <h5><i class="bi bi-person-badge me-2"></i>Datos del Cliente</h5>
+      <hr style="border-color:var(--border-color);">
+      <table class="table table-borderless" style="color:var(--text-primary);">
+        <tr><td class="text-secondary">Tipo Doc:</td><td><span class="badge badge-estado badge-emitido">{{ cliente.tipo_doc }}</span></td></tr>
+        <tr><td class="text-secondary">Número:</td><td><strong>{{ cliente.num_doc }}</strong></td></tr>
+        <tr><td class="text-secondary">Razón Social:</td><td>{{ cliente.razon_social }}</td></tr>
+        <tr><td class="text-secondary">Dirección:</td><td>{{ cliente.direccion|default:"—" }}</td></tr>
+        <tr><td class="text-secondary">Email:</td><td>{{ cliente.email|default:"—" }}</td></tr>
+      </table>
+      <a href="{% url 'cliente-editar' cliente.pk %}" class="btn btn-primary-custom btn-sm"><i class="bi bi-pencil me-1"></i>Editar</a>
+    </div>
+  </div>
+  <div class="col-md-7">
+    <div class="stat-card">
+      <h5><i class="bi bi-receipt me-2"></i>Comprobantes Emitidos</h5>
+      <div class="table-responsive">
+        <table class="table table-dark-custom">
+          <thead><tr><th>Serie-Número</th><th>Tipo</th><th>Fecha</th><th class="text-end">Total</th><th>Estado</th></tr></thead>
+          <tbody>
+            {% for c in comprobantes %}
+            <tr>
+              <td><a href="{% url 'comprobante-detalle' c.pk %}" style="color:var(--accent);">{{ c.serie_numero }}</a></td>
+              <td>{{ c.get_tipo_display }}</td>
+              <td>{{ c.fecha_emision }}</td>
+              <td class="text-end">S/.{{ c.total|floatformat:2 }}</td>
+              <td><span class="badge-estado badge-{{ c.estado|lower }}">{{ c.get_estado_display }}</span></td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5" class="text-center text-secondary">Sin comprobantes.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}{{ titulo }} — FacturaSUNAT{% endblock %}
+{% block page_title %}<i class="bi bi-person-plus me-2"></i>{{ titulo }}{% endblock %}
+{% block content %}
+<div class="row">
+  <div class="col-md-8">
+    <div class="stat-card">
+      <form method="post">
+        {% csrf_token %}
+        
+        <div class="row g-3 mb-3">
+          <div class="col-md-4">
+            <label class="form-label">{{ form.tipo_doc.label }}</label>
+            {{ form.tipo_doc }}
+            {% if form.tipo_doc.errors %}
+            <div class="text-danger mt-1" style="font-size:0.8rem;">{{ form.tipo_doc.errors.0 }}</div>
+            {% endif %}
+          </div>
+          <div class="col-md-8">
+            <label class="form-label">{{ form.num_doc.label }}</label>
+            <div class="input-group">
+              {{ form.num_doc }}
+              <button class="btn btn-outline-custom" type="button" id="btn-buscar-doc" title="Consultar en RENIEC/SUNAT">
+                <i class="bi bi-search" id="search-icon"></i>
+                <span class="spinner-border spinner-border-sm d-none" id="search-spinner" role="status" aria-hidden="true"></span>
+              </button>
+            </div>
+            <small class="text-secondary mt-1 d-block">Ingrese el número y haga clic en buscar para autocompletar.</small>
+            {% if form.num_doc.errors %}
+            <div class="text-danger mt-1" style="font-size:0.8rem;">{{ form.num_doc.errors.0 }}</div>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">{{ form.razon_social.label }}</label>
+          {{ form.razon_social }}
+          {% if form.razon_social.errors %}
+          <div class="text-danger mt-1" style="font-size:0.8rem;">{{ form.razon_social.errors.0 }}</div>
+          {% endif %}
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">{{ form.direccion.label }}</label>
+          {{ form.direccion }}
+          {% if form.direccion.errors %}
+          <div class="text-danger mt-1" style="font-size:0.8rem;">{{ form.direccion.errors.0 }}</div>
+          {% endif %}
+        </div>
+
+        <div class="mb-4">
+          <label class="form-label">{{ form.email.label }}</label>
+          {{ form.email }}
+          {% if form.email.errors %}
+          <div class="text-danger mt-1" style="font-size:0.8rem;">{{ form.email.errors.0 }}</div>
+          {% endif %}
+        </div>
+
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-primary-custom"><i class="bi bi-check-lg me-2"></i>Guardar</button>
+          <a href="{% url 'cliente-lista' %}" class="btn btn-outline-custom">Cancelar</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const btnBuscar = document.getElementById('btn-buscar-doc');
+    const inputTipoDoc = document.querySelector('[name="tipo_doc"]');
+    const inputNumDoc = document.querySelector('[name="num_doc"]');
+    const inputRazonSocial = document.querySelector('[name="razon_social"]');
+    const inputDireccion = document.querySelector('[name="direccion"]');
+    const searchIcon = document.getElementById('search-icon');
+    const searchSpinner = document.getElementById('search-spinner');
+
+    if (btnBuscar && inputNumDoc) {
+        btnBuscar.addEventListener('click', function() {
+            const numero = inputNumDoc.value.trim();
+            const tipoDoc = inputTipoDoc ? inputTipoDoc.value : '';
+
+            if (!numero) {
+                alert('Por favor ingrese un número de documento para buscar.');
+                return;
+            }
+
+            // Mostramos estado de carga
+            btnBuscar.disabled = true;
+            searchIcon.classList.add('d-none');
+            searchSpinner.classList.remove('d-none');
+
+            // Consultamos al backend proxy interno
+            fetch(`/clientes/api/internal/consultar-doc/?tipo=${tipoDoc}&numero=${numero}`)
+                .then(response => response.json())
+                .then(res => {
+                    btnBuscar.disabled = false;
+                    searchIcon.classList.remove('d-none');
+                    searchSpinner.classList.add('d-none');
+
+                    if (res.success && res.data) {
+                        const d = res.data;
+                        if (d.dni) {
+                            // Respuesta de DNI
+                            const nombreCompleto = `${d.nombres || ''} ${d.apellidoPaterno || ''} ${d.apellidoMaterno || ''}`.replace(/\s+/g, ' ').trim();
+                            if (inputRazonSocial) inputRazonSocial.value = nombreCompleto;
+                        } else if (d.ruc) {
+                            // Respuesta de RUC
+                            if (inputRazonSocial && d.razonSocial) inputRazonSocial.value = d.razonSocial;
+                            if (inputDireccion && d.direccion) inputDireccion.value = d.direccion;
+                        } else {
+                            alert('No se obtuvieron datos válidos para el documento.');
+                        }
+                    } else {
+                        alert(res.message || 'No se encontró información para el documento ingresado.');
+                    }
+                })
+                .catch(err => {
+                    btnBuscar.disabled = false;
+                    searchIcon.classList.remove('d-none');
+                    searchSpinner.classList.add('d-none');
+                    alert('Error de conexión al consultar el documento.');
+                });
+        });
+    }
+});
+</script>
+{% endblock %}

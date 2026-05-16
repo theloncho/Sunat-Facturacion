@@ -1,0 +1,247 @@
+{% extends "base.html" %}
+{% block title %}Emitir Comprobante — FacturaSUNAT{% endblock %}
+{% block page_title %}<i class="bi bi-plus-circle me-2"></i>Emitir Comprobante{% endblock %}
+
+{% block content %}
+<div x-data="comprobanteForm()" class="fade-in-up">
+  <!-- Tipo de comprobante -->
+  <div class="stat-card mb-4">
+    <div class="row g-3">
+      <div class="col-md-4">
+        <label class="form-label">Tipo de Comprobante</label>
+          <select class="form-select" x-model="tipo">
+          <option value="FACTURA">Factura</option>
+          <option value="BOLETA">Boleta</option>
+        </select>
+        <small class="text-secondary" x-show="tipo==='FACTURA'">Requiere cliente con RUC (11 dígitos)</small>
+        <small class="text-secondary" x-show="tipo==='BOLETA'">Acepta cliente con DNI o RUC</small>
+      </div>
+      <div class="col-md-8">
+        <label class="form-label">Buscar Cliente</label>
+        <div class="autocomplete-wrapper">
+          <input type="text" class="form-control" placeholder="Buscar por RUC, DNI o nombre..."
+                 x-model="clienteQuery" @input.debounce.300ms="buscarCliente()"
+                 @focus="showResults = clienteResults.length > 0">
+          <div class="autocomplete-results" x-show="showResults && clienteResults.length > 0" @click.away="showResults=false">
+            <template x-for="c in clienteResults" :key="c.id">
+              <div class="result-item" @click="seleccionarCliente(c)">
+                <span class="doc-number" x-text="c.tipo_doc + ': ' + c.num_doc"></span>
+                <span x-text="' — ' + c.razon_social"></span>
+              </div>
+            </template>
+          </div>
+        </div>
+        <div x-show="clienteSeleccionado" class="mt-2 p-2 rounded-3" style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);">
+          <i class="bi bi-check-circle" style="color:var(--success);"></i>
+          <strong x-text="clienteSeleccionado?.razon_social"></strong>
+          <span class="text-secondary" x-text="' (' + (clienteSeleccionado?.tipo_doc || '') + ': ' + (clienteSeleccionado?.num_doc || '') + ')'"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Líneas de detalle -->
+  <div class="stat-card mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h5 class="mb-0"><i class="bi bi-list-check me-2"></i>Líneas de Detalle</h5>
+      <button class="btn btn-sm btn-success-custom" @click="agregarLinea()">
+        <i class="bi bi-plus me-1"></i>Agregar Línea
+      </button>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-dark-custom mb-0">
+        <thead>
+          <tr>
+            <th style="width:35%">Producto</th>
+            <th style="width:10%">Cant.</th>
+            <th style="width:15%">P. Unit.</th>
+            <th style="width:10%">Desc.%</th>
+            <th style="width:10%">IGV</th>
+            <th style="width:15%">Subtotal</th>
+            <th style="width:5%"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for="(linea, idx) in lineas" :key="idx">
+            <tr>
+              <td>
+                <select class="form-select form-select-sm" x-model="linea.producto_id" @change="actualizarPrecio(idx)" style="background:var(--bg-card);border-color:var(--border-color);color:var(--text-primary);">
+                  <option value="">Seleccionar...</option>
+                  {% for p in productos %}
+                  <option value="{{ p.id }}" data-precio="{{ p.precio_unitario }}" data-igv="{{ p.afecto_igv }}">{{ p.descripcion }} (S/.{{ p.precio_unitario }})</option>
+                  {% endfor %}
+                </select>
+              </td>
+              <td><input type="number" class="form-control form-control-sm" x-model.number="linea.cantidad" @input="calcularLinea(idx)" min="0.01" step="0.01"></td>
+              <td><input type="number" class="form-control form-control-sm" x-model.number="linea.precio_unitario" @input="calcularLinea(idx)" min="0.01" step="0.01"></td>
+              <td><input type="number" class="form-control form-control-sm" x-model.number="linea.descuento" @input="calcularLinea(idx)" min="0" max="100" step="0.1"></td>
+              <td style="color:var(--accent);" x-text="'S/.' + linea.igv_linea.toFixed(2)"></td>
+              <td><strong x-text="'S/.' + linea.subtotal.toFixed(2)"></strong></td>
+              <td><button class="btn btn-sm" style="color:var(--danger);" @click="eliminarLinea(idx)"><i class="bi bi-trash"></i></button></td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Totales -->
+  <div class="row g-4 mb-4">
+    <div class="col-md-6"></div>
+    <div class="col-md-6">
+      <div class="stat-card">
+        <div class="d-flex justify-content-between mb-2">
+          <span class="text-secondary">Base Imponible:</span>
+          <span x-text="'S/.' + baseImponible.toFixed(2)"></span>
+        </div>
+        <div class="d-flex justify-content-between mb-2">
+          <span class="text-secondary">IGV (18%):</span>
+          <span style="color:var(--warning);" x-text="'S/.' + totalIGV.toFixed(2)"></span>
+        </div>
+        <hr style="border-color:var(--border-color);">
+        <div class="d-flex justify-content-between">
+          <strong style="font-size:1.2rem;">TOTAL:</strong>
+          <strong style="font-size:1.4rem;color:var(--accent);" x-text="'S/.' + totalGeneral.toFixed(2)"></strong>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Botón Emitir -->
+  <div class="d-flex gap-3">
+    <button class="btn btn-primary-custom btn-lg" @click="emitir()" :disabled="emitiendo || !clienteSeleccionado || lineas.length === 0">
+      <span x-show="!emitiendo"><i class="bi bi-send me-2"></i>Emitir Comprobante</span>
+      <span x-show="emitiendo"><span class="spinner-border spinner-border-sm me-2"></span>Procesando...</span>
+    </button>
+  </div>
+
+  <!-- Resultado -->
+  <div x-show="resultado" class="mt-4 p-3 rounded-3" :class="resultado?.success ? 'alert-custom' : 'alert alert-danger'">
+    <template x-if="resultado?.success">
+      <div>
+        <i class="bi bi-check-circle-fill text-success me-2" style="font-size:1.3rem;"></i>
+        <strong x-text="resultado.message"></strong>
+        <div class="mt-2">
+          <a :href="'/comprobantes/' + resultado.comprobante_id + '/'" class="btn btn-sm btn-outline-custom me-2">
+            <i class="bi bi-eye me-1"></i>Ver Comprobante
+          </a>
+          <a :href="'/comprobantes/' + resultado.comprobante_id + '/pdf/'" class="btn btn-sm btn-outline-custom" target="_blank">
+            <i class="bi bi-file-pdf me-1"></i>Descargar PDF
+          </a>
+        </div>
+      </div>
+    </template>
+    <template x-if="resultado && !resultado.success">
+      <div><i class="bi bi-exclamation-triangle me-2"></i><span x-text="resultado.error"></span></div>
+    </template>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+{% load l10n %}
+<script>
+const PRODUCTOS_DATA = {
+  {% for p in productos %}
+  {{ p.id }}: { precio: {% localize off %}{{ p.precio_unitario }}{% endlocalize %}, afecto_igv: {{ p.afecto_igv|yesno:"true,false" }} },
+  {% endfor %}
+};
+
+window.comprobanteForm = function() {
+  return {
+    tipo: 'FACTURA',
+    clienteQuery: '',
+    clienteResults: [],
+    clienteSeleccionado: null,
+    showResults: false,
+    lineas: [{ producto_id: '', cantidad: 1, precio_unitario: 0, descuento: 0, igv_linea: 0, subtotal: 0, afecto_igv: true }],
+    emitiendo: false,
+    resultado: null,
+
+    get baseImponible() {
+      return this.lineas.reduce((sum, l) => sum + (l.afecto_igv ? l.subtotal : 0), 0);
+    },
+    get totalInafecto() {
+      return this.lineas.reduce((sum, l) => sum + (!l.afecto_igv ? l.subtotal : 0), 0);
+    },
+    get totalIGV() {
+      return this.lineas.reduce((sum, l) => sum + l.igv_linea, 0);
+    },
+    get totalGeneral() {
+      return this.baseImponible + this.totalIGV + this.totalInafecto;
+    },
+
+    async buscarCliente() {
+      if (this.clienteQuery.length < 2) { this.clienteResults = []; return; }
+      const res = await fetch(`/api/internal/buscar-cliente/?q=${encodeURIComponent(this.clienteQuery)}`);
+      this.clienteResults = await res.json();
+      this.showResults = true;
+    },
+
+    seleccionarCliente(c) {
+      this.clienteSeleccionado = c;
+      this.clienteQuery = `${c.tipo_doc}: ${c.num_doc} — ${c.razon_social}`;
+      this.showResults = false;
+    },
+
+    agregarLinea() {
+      this.lineas.push({ producto_id: '', cantidad: 1, precio_unitario: 0, descuento: 0, igv_linea: 0, subtotal: 0, afecto_igv: true });
+    },
+
+    eliminarLinea(idx) {
+      if (this.lineas.length > 1) this.lineas.splice(idx, 1);
+    },
+
+    actualizarPrecio(idx) {
+      const pid = parseInt(this.lineas[idx].producto_id);
+      if (PRODUCTOS_DATA[pid]) {
+        this.lineas[idx].precio_unitario = PRODUCTOS_DATA[pid].precio;
+        this.lineas[idx].afecto_igv = PRODUCTOS_DATA[pid].afecto_igv;
+        this.calcularLinea(idx);
+      }
+    },
+
+    calcularLinea(idx) {
+      const l = this.lineas[idx];
+      const valorVenta = l.cantidad * l.precio_unitario;
+      const descMonto = valorVenta * (l.descuento / 100);
+      l.subtotal = Math.round((valorVenta - descMonto) * 100) / 100;
+      l.igv_linea = l.afecto_igv ? Math.round(l.subtotal * 0.18 * 100) / 100 : 0;
+    },
+
+    async emitir() {
+      if (!this.clienteSeleccionado) { alert('Seleccione un cliente.'); return; }
+      if (this.lineas.length === 0 || !this.lineas[0].producto_id) { alert('Agregue al menos un producto.'); return; }
+
+      this.emitiendo = true;
+      this.resultado = null;
+
+      const payload = {
+        tipo: this.tipo,
+        cliente_id: this.clienteSeleccionado.id,
+        detalles: this.lineas.filter(l => l.producto_id).map(l => ({
+          producto_id: parseInt(l.producto_id),
+          cantidad: l.cantidad,
+          precio_unitario: l.precio_unitario,
+          descuento: l.descuento,
+        })),
+      };
+
+      try {
+        const res = await fetch('/comprobantes/emitir/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.cookie.match(/csrftoken=([^;]+)/)?.[1] },
+          body: JSON.stringify(payload),
+        });
+        this.resultado = await res.json();
+      } catch (e) {
+        this.resultado = { success: false, error: 'Error de conexión.' };
+      }
+      this.emitiendo = false;
+    },
+  };
+}
+</script>
+{% endblock %}

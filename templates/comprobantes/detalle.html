@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}{{ comprobante.serie_numero }} — FacturaSUNAT{% endblock %}
+{% block page_title %}<i class="bi bi-file-earmark-text me-2"></i>Comprobante {{ comprobante.serie_numero }}{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+  <!-- Voucher Preview -->
+  <div class="col-lg-8">
+    <div class="voucher">
+      <div class="voucher-header">
+        <h4>{{ comprobante.empresa.razon_social }}</h4>
+        <p class="mb-1" style="font-size:0.85rem;">RUC: {{ comprobante.empresa.ruc }}</p>
+        <p class="mb-2" style="font-size:0.8rem;color:#6b7280;">{{ comprobante.empresa.direccion }}</p>
+        <div class="badge-invoice">
+          <div class="type">{{ comprobante.get_tipo_display|upper }} ELECTRÓNICA</div>
+          <div class="number">{{ comprobante.serie_numero }}</div>
+        </div>
+        <p class="mt-2 mb-0" style="color:#6b7280;">Fecha: {{ comprobante.fecha_emision }}</p>
+      </div>
+
+      <!-- Datos del cliente -->
+      <div class="info-cliente">
+        <div class="row">
+          <div class="col-6"><div class="label">Cliente:</div><div class="value">{{ comprobante.cliente.razon_social }}</div></div>
+          <div class="col-3"><div class="label">{{ comprobante.cliente.tipo_doc }}:</div><div class="value">{{ comprobante.cliente.num_doc }}</div></div>
+          <div class="col-3"><div class="label">Dirección:</div><div class="value">{{ comprobante.cliente.direccion|default:"N/A" }}</div></div>
+        </div>
+      </div>
+
+      <!-- Detalles -->
+      <table class="table table-bordered table-sm mb-0">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Descripción</th>
+            <th class="text-end">Cant.</th>
+            <th class="text-end">P. Unit.</th>
+            <th class="text-end">Desc.</th>
+            <th class="text-end">IGV</th>
+            <th class="text-end">Subtotal</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in comprobante.detalles.all %}
+          <tr>
+            <td>{{ forloop.counter }}</td>
+            <td>{{ d.producto.descripcion }}</td>
+            <td class="text-end">{{ d.cantidad|floatformat:2 }}</td>
+            <td class="text-end">S/.{{ d.precio_unitario|floatformat:2 }}</td>
+            <td class="text-end">{{ d.descuento|floatformat:1 }}%</td>
+            <td class="text-end">S/.{{ d.igv_linea|floatformat:2 }}</td>
+            <td class="text-end"><strong>S/.{{ d.subtotal|floatformat:2 }}</strong></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <!-- Totales -->
+      <div class="totales text-end">
+        <table class="d-inline-block">
+          <tr><td class="pe-4" style="color:#6b7280;">Base Imponible:</td><td class="text-end">S/.{{ comprobante.subtotal|floatformat:2 }}</td></tr>
+          {% if comprobante.total_inafecto > 0 %}
+          <tr><td class="pe-4" style="color:#6b7280;">Total Inafecto:</td><td class="text-end">S/.{{ comprobante.total_inafecto|floatformat:2 }}</td></tr>
+          {% endif %}
+          <tr><td class="pe-4" style="color:#6b7280;">IGV (18%):</td><td class="text-end">S/.{{ comprobante.igv|floatformat:2 }}</td></tr>
+          <tr class="total-line"><td class="pe-4">TOTAL</td><td class="amount">S/.{{ comprobante.total|floatformat:2 }}</td></tr>
+        </table>
+      </div>
+
+      {% if comprobante.hash_cpe %}
+      <div class="text-center mt-3" style="font-size:0.7rem;color:#999;">
+        Hash: {{ comprobante.hash_cpe|truncatechars:40 }}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Info lateral -->
+  <div class="col-lg-4">
+    <div class="stat-card mb-3">
+      <h6><i class="bi bi-info-circle me-2"></i>Estado SUNAT</h6>
+      <div class="text-center py-3">
+        <span class="badge-estado badge-{{ comprobante.estado|lower }}" style="font-size:1rem;padding:0.5rem 1.5rem;">
+          {{ comprobante.get_estado_display }}
+        </span>
+      </div>
+    </div>
+
+    <div class="stat-card mb-3 no-print">
+      <h6><i class="bi bi-tools me-2"></i>Acciones</h6>
+      <div class="d-grid gap-2">
+        <a href="{% url 'comprobante-pdf' comprobante.pk %}" class="btn btn-primary-custom" target="_blank">
+          <i class="bi bi-file-pdf me-2"></i>Descargar PDF
+        </a>
+        <button onclick="window.print()" class="btn btn-outline-custom">
+          <i class="bi bi-printer me-2"></i>Imprimir
+        </button>
+        {% if comprobante.estado == 'RECHAZADO' %}
+        <a href="{% url 'comprobante-reenviar' comprobante.pk %}" class="btn btn-outline-custom" onclick="return confirm('¿Reenviar?')">
+          <i class="bi bi-arrow-repeat me-2"></i>Reenviar a SUNAT
+        </a>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Log de envíos -->
+    {% if comprobante.logs_envio.all %}
+    <div class="stat-card no-print">
+      <h6><i class="bi bi-clock-history me-2"></i>Historial de Envíos</h6>
+      {% for log in comprobante.logs_envio.all %}
+      <div class="p-2 mb-2 rounded-3" style="background:rgba(255,255,255,0.03);border:1px solid var(--border-color);">
+        <div class="d-flex justify-content-between">
+          <small class="text-secondary">{{ log.fecha_envio|date:"d/m/Y H:i" }}</small>
+          <span class="badge-estado badge-{{ log.estado_respuesta|lower }}" style="font-size:0.65rem;">{{ log.get_estado_respuesta_display }}</span>
+        </div>
+        <small>{{ log.descripcion|truncatechars:60 }}</small>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
