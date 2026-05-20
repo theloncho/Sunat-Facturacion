@@ -3,7 +3,7 @@
     "model": "empresa.empresa",
     "pk": 1,
     "fields": {
-      "ruc": "20601234567",
+      "ruc": "20000000001",
       "razon_social": "Soluciones Digitales del Perú SAC",
       "nombre_comercial": "DigiPerú",
       "direccion": "Av. La Tecnología 456, San Isidro, Lima",

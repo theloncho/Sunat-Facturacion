@@ -14,8 +14,13 @@ La firma digital es un mock (hash SHA-256 del contenido XML).
 En producción se reemplazaría con una firma real usando certificado digital.
 """
 import hashlib
+import logging
 from datetime import datetime
 from lxml import etree
+from decouple import config
+from apps.comprobantes.signer import SunatSigner
+
+logger = logging.getLogger(__name__)
 
 
 # ── Namespaces UBL 2.1 ──────────────────────────────────────────────
@@ -103,22 +108,14 @@ def generar_xml_comprobante(comprobante):
 
     tipo_codigo = TIPO_DOCUMENTO_SUNAT.get(comprobante.tipo, '01')
 
-    # ═══ Raíz del documento ═══════════════════════════════════════
-    invoice = etree.Element('Invoice', nsmap=NSMAP)
+    # ═══ Raíz del documento con Namespace explícito ═══════════════
+    invoice = etree.Element(f'{{{NSMAP[None]}}}Invoice', nsmap=NSMAP)
 
-    # ── UBLExtensions (firma digital mock) ────────────────────────
+    # ── UBLExtensions (Espacio para la firma digital) ─────────────────
     extensions = etree.SubElement(invoice, f'{{{EXT}}}UBLExtensions')
     extension = etree.SubElement(extensions, f'{{{EXT}}}UBLExtension')
     ext_content = etree.SubElement(extension, f'{{{EXT}}}ExtensionContent')
-
-    # Firma digital mock (se completará después con el hash)
-    signature_elem = etree.SubElement(ext_content, f'{{{DS}}}Signature')
-    signature_elem.set('Id', 'SignatureSP')
-    signed_info = etree.SubElement(signature_elem, f'{{{DS}}}SignedInfo')
-    canon = etree.SubElement(signed_info, f'{{{DS}}}CanonicalizationMethod')
-    canon.set('Algorithm', 'http://www.w3.org/2001/10/xml-exc-c14n#')
-    sig_method = etree.SubElement(signed_info, f'{{{DS}}}SignatureMethod')
-    sig_method.set('Algorithm', 'http://www.w3.org/2001/04/xmldsig-more#rsa-sha256')
+    # El contenido se llenará en SunatSigner.sign_xml()
 
     # ── Metadatos del comprobante ─────────────────────────────────
     _cbc(invoice, 'UBLVersionID', '2.1')
@@ -126,9 +123,13 @@ def generar_xml_comprobante(comprobante):
     _cbc(invoice, 'ID', comprobante.serie_numero)
     _cbc(invoice, 'IssueDate', comprobante.fecha_emision.strftime('%Y-%m-%d'))
     _cbc(invoice, 'IssueTime', datetime.now().strftime('%H:%M:%S'))
-    _cbc(invoice, 'InvoiceTypeCode', tipo_codigo,
-         listAgencyName='PE:SUNAT', listName='Tipo de Documento', listURI='urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01')
-    _cbc(invoice, 'DocumentCurrencyCode', 'PEN', listID='ISO 4217 Alpha', listAgencyName='United Nations Economic Commission for Europe')
+    _cbc(invoice, 'InvoiceTypeCode', tipo_codigo, 
+         listAgencyName="PE:SUNAT", 
+         listName="Tipo de Documento", 
+         listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01")
+    _cbc(invoice, 'DocumentCurrencyCode', 'PEN', 
+         listID="ISO 4217 Alpha", 
+         listAgencyName="United Nations Economic Commission for Europe")
 
     # ── Firma referencia ──────────────────────────────────────────
     signature_ref = _cac(invoice, 'Signature')
@@ -219,8 +220,7 @@ def generar_xml_comprobante(comprobante):
         line = _cac(invoice, 'InvoiceLine')
         _cbc(line, 'ID', str(idx))
         _cbc(line, 'InvoicedQuantity', f'{detalle.cantidad:.2f}',
-             unitCode=detalle.producto.unidad_medida,
-             unitCodeListID='UN/ECE rec 20', unitCodeListAgencyName='United Nations Economic Commission for Europe')
+             unitCode=detalle.producto.unidad_medida)
         _cbc(line, 'LineExtensionAmount', f'{detalle.subtotal:.2f}', currencyID='PEN')
 
         # Pricing
@@ -273,19 +273,26 @@ def generar_xml_comprobante(comprobante):
         price = _cac(line, 'Price')
         _cbc(price, 'PriceAmount', f'{detalle.precio_unitario:.2f}', currencyID='PEN')
 
-    # ═══ Serializar XML ═══════════════════════════════════════════
-    xml_bytes = etree.tostring(invoice, pretty_print=True, xml_declaration=True, encoding='UTF-8')
-    xml_string = xml_bytes.decode('utf-8')
+    # ═══ Serializar XML sin espacios en blanco adicionales ════════
+    xml_bytes = etree.tostring(invoice, pretty_print=False, xml_declaration=False, encoding='UTF-8')
+    xml_string = '<?xml version="1.0" encoding="utf-8"?>\n' + xml_bytes.decode('utf-8')
 
-    # ═══ Firma digital mock (hash SHA-256) ════════════════════════
+    # ═══ Firma digital REAL ═══════════════════════════════════════
+    if config('SUNAT_BETA_MODE', default=True, cast=bool):
+        try:
+            signer = SunatSigner(
+                pfx_path=config('SUNAT_CERT_PATH'),
+                pfx_password=config('SUNAT_CERT_PASSWORD')
+            )
+            xml_string_firmado = signer.sign_xml(xml_string)
+            hash_cpe = signer.get_hash(xml_string_firmado)
+            return xml_string_firmado, hash_cpe
+        except Exception as e:
+            # Si falla la firma real en desarrollo, al menos devolvemos el mock 
+            # pero notificamos en log.
+            logger.error("Error en firma real: %s. Usando firma mock.", e)
+    
+    # ═══ Firma digital mock (fallback) ════════════════════════════
     hash_cpe = hashlib.sha256(xml_bytes).hexdigest()
-
-    # Insertar el hash en el SignatureValue del XML
-    sig_value = etree.SubElement(signature_elem, f'{{{DS}}}SignatureValue')
-    sig_value.text = hash_cpe
-
-    # Re-serializar con la firma incluida
-    xml_bytes_final = etree.tostring(invoice, pretty_print=True, xml_declaration=True, encoding='UTF-8')
-    xml_string_final = xml_bytes_final.decode('utf-8')
-
-    return xml_string_final, hash_cpe
+    # Si llegamos aquí es porque la firma real falló, el XML ya no tiene el nodo Signature
+    return xml_string, hash_cpe

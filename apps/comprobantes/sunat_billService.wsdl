@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/" xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/" xmlns:tns="http://service.sunat.gob.pe" xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="http://service.sunat.gob.pe">
+    <wsdl:types>
+        <xsd:schema targetNamespace="http://service.sunat.gob.pe">
+            <xsd:element name="sendBill">
+                <xsd:complexType>
+                    <xsd:sequence>
+                        <xsd:element name="fileName" type="xsd:string"/>
+                        <xsd:element name="contentFile" type="xsd:base64Binary"/>
+                    </xsd:sequence>
+                </xsd:complexType>
+            </xsd:element>
+            <xsd:element name="sendBillResponse">
+                <xsd:complexType>
+                    <xsd:sequence>
+                        <xsd:element name="applicationResponse" type="xsd:base64Binary"/>
+                    </xsd:sequence>
+                </xsd:complexType>
+            </xsd:element>
+            <xsd:element name="sendPack">
+                <xsd:complexType>
+                    <xsd:sequence>
+                        <xsd:element name="fileName" type="xsd:string"/>
+                        <xsd:element name="contentFile" type="xsd:base64Binary"/>
+                    </xsd:sequence>
+                </xsd:complexType>
+            </xsd:element>
+            <xsd:element name="sendPackResponse">
+                <xsd:complexType>
+                    <xsd:sequence>
+                        <xsd:element name="ticket" type="xsd:string"/>
+                    </xsd:sequence>
+                </xsd:complexType>
+            </xsd:element>
+            <xsd:element name="getStatus">
+                <xsd:complexType>
+                    <xsd:sequence>
+                        <xsd:element name="ticket" type="xsd:string"/>
+                    </xsd:sequence>
+                </xsd:complexType>
+            </xsd:element>
+            <xsd:element name="getStatusResponse">
+                <xsd:complexType>
+                    <xsd:sequence>
+                        <xsd:element name="status" type="tns:statusResponse"/>
+                    </xsd:sequence>
+                </xsd:complexType>
+            </xsd:element>
+            <xsd:complexType name="statusResponse">
+                <xsd:sequence>
+                    <xsd:element name="content" type="xsd:base64Binary" minOccurs="0"/>
+                    <xsd:element name="statusCode" type="xsd:string" minOccurs="0"/>
+                </xsd:sequence>
+            </xsd:complexType>
+        </xsd:schema>
+    </wsdl:types>
+    <wsdl:message name="sendBillRequest">
+        <wsdl:part element="tns:sendBill" name="parameters"/>
+    </wsdl:message>
+    <wsdl:message name="sendBillResponse">
+        <wsdl:part element="tns:sendBillResponse" name="parameters"/>
+    </wsdl:message>
+    <wsdl:portType name="billService">
+        <wsdl:operation name="sendBill">
+            <wsdl:input message="tns:sendBillRequest"/>
+            <wsdl:output message="tns:sendBillResponse"/>
+        </wsdl:operation>
+    </wsdl:portType>
+    <wsdl:binding name="billServicePortBinding" type="tns:billService">
+        <soap:binding style="document" transport="http://schemas.xmlsoap.org/soap/http"/>
+        <wsdl:operation name="sendBill">
+            <soap:operation soapAction="urn:sendBill"/>
+            <wsdl:input>
+                <soap:body use="literal"/>
+            </wsdl:input>
+            <wsdl:output>
+                <soap:body use="literal"/>
+            </wsdl:output>
+        </wsdl:operation>
+    </wsdl:binding>
+    <wsdl:service name="billService">
+        <wsdl:port binding="tns:billServicePortBinding" name="billServicePort">
+            <soap:address location="https://e-beta.sunat.gob.pe/ol-ti-itcpfegem-beta/billService"/>
+        </wsdl:port>
+    </wsdl:service>
+</wsdl:definitions>

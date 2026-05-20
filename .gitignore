@@ -19,3 +19,8 @@ media/
 htmlcov/
 .pytest_cache/
 .mypy_cache/
+# Certificados digitales (sensibles)
+certificates/*.pfx
+certificates/*.pem
+certificates/*.crt
+certificates/*.key

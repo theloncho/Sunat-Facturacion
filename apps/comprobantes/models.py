@@ -117,6 +117,16 @@ class Comprobante(models.Model):
     def serie_numero(self):
         return f"{self.serie}-{self.numero:05d}"
 
+
+    @property
+    def tipo_sunat(self):
+        mapa = {
+            self.TipoComprobante.FACTURA: '01',
+            self.TipoComprobante.BOLETA: '03',
+            self.TipoComprobante.NOTA_CREDITO: '07',
+        }
+        return mapa.get(self.tipo, '01')
+
     def delete(self, *args, **kwargs):
         """Comprobante ACEPTADO no se puede eliminar."""
         if self.estado == self.EstadoComprobante.ACEPTADO:
@@ -266,13 +276,13 @@ class LogEnvioSUNAT(models.Model):
     )
     fecha_envio = models.DateTimeField(auto_now_add=True, verbose_name='Fecha de Envío')
     estado_respuesta = models.CharField(
-        max_length=10,
+        max_length=20,
         choices=EstadoRespuesta.choices,
         default=EstadoRespuesta.PENDIENTE,
         verbose_name='Estado de Respuesta'
     )
     codigo_respuesta = models.CharField(
-        max_length=10, blank=True, verbose_name='Código de Respuesta'
+        max_length=20, blank=True, verbose_name='Código de Respuesta'
     )
     descripcion = models.TextField(blank=True, verbose_name='Descripción de Respuesta')
 

@@ -17,7 +17,7 @@ services:
     build: .
     command: >
       sh -c "python manage.py migrate &&
-             python manage.py loaddata fixtures/initial_data.json 2>/dev/null;
+             python -c \"import os, django; os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings'); django.setup(); from apps.empresa.models import Empresa; os.system('python manage.py loaddata fixtures/initial_data.json') if not Empresa.objects.exists() else None\" &&
              python manage.py runserver 0.0.0.0:8000"
     volumes:
       - .:/app
