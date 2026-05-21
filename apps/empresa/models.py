@@ -49,7 +49,8 @@ class SerieComprobante(models.Model):
     class TipoComprobante(models.TextChoices):
         FACTURA = 'F', 'Factura'
         BOLETA = 'B', 'Boleta'
-        NOTA_CREDITO = 'FC', 'Nota de Crédito'
+        NOTA_CREDITO = 'FC', 'Nota de Crédito (Factura)'
+        NOTA_CREDITO_BOLETA = 'BC', 'Nota de Crédito (Boleta)'
 
     empresa = models.ForeignKey(
         Empresa,

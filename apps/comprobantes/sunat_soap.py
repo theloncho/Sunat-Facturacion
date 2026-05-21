@@ -66,18 +66,19 @@ class SunatSoapClient:
 
         # Crear ZIP
         zip_data = self._create_zip(xml_file_name, xml_content)
-        zip_b64 = base64.b64encode(zip_data).decode('utf-8')
 
         try:
             # Llamar al servicio sendBill
+            # SUNAT espera bytes crudos del ZIP (no base64)
             # Retorna el CDR (Constancia de Recepción) en un ZIP base64
             response = self.client.service.sendBill(
                 fileName=zip_file_name,
-                contentFile=zip_b64
+                contentFile=zip_data
             )
             
             # Decodificar el CDR
-            cdr_zip = base64.b64decode(response)
+            # SUNAT/zeep devuelve bytes crudos del ZIP, NO base64
+            cdr_zip = response if isinstance(response, bytes) else base64.b64decode(response)
             return self._process_cdr(cdr_zip, file_name)
             
         except Exception as e:

@@ -16,6 +16,7 @@ En producción se reemplazaría con una firma real usando certificado digital.
 import hashlib
 import logging
 from datetime import datetime
+from decimal import Decimal
 from lxml import etree
 from decouple import config
 from apps.comprobantes.signer import SunatSigner
@@ -32,6 +33,8 @@ NSMAP = {
     'ds': 'http://www.w3.org/2000/09/xmldsig#',
     'sac': 'urn:sunat:names:specification:ubl:peru:schema:xsd:SunatAggregateComponents-1',
 }
+
+SAC = 'urn:sunat:names:specification:ubl:peru:schema:xsd:SunatAggregateComponents-1'
 
 CBC = 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2'
 CAC = 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2'
@@ -107,76 +110,103 @@ def generar_xml_comprobante(comprobante):
     cliente = comprobante.cliente
 
     tipo_codigo = TIPO_DOCUMENTO_SUNAT.get(comprobante.tipo, '01')
+    is_credit_note = (comprobante.tipo == 'NOTA_CREDITO')
 
     # ═══ Raíz del documento con Namespace explícito ═══════════════
-    invoice = etree.Element(f'{{{NSMAP[None]}}}Invoice', nsmap=NSMAP)
+    root_ns = 'urn:oasis:names:specification:ubl:schema:xsd:CreditNote-2' if is_credit_note else NSMAP[None]
+    root_tag = 'CreditNote' if is_credit_note else 'Invoice'
+    
+    nsmap = NSMAP.copy()
+    nsmap[None] = root_ns
 
-    # ── UBLExtensions (Espacio para la firma digital) ─────────────────
+    invoice = etree.Element(f'{{{root_ns}}}{root_tag}', nsmap=nsmap)
+
+    # ── UBLExtensions ─────────────────────────────────────────────
     extensions = etree.SubElement(invoice, f'{{{EXT}}}UBLExtensions')
+    
+    # Extension 1: Para la firma digital (se llenará en SunatSigner.sign_xml())
     extension = etree.SubElement(extensions, f'{{{EXT}}}UBLExtension')
     ext_content = etree.SubElement(extension, f'{{{EXT}}}ExtensionContent')
-    # El contenido se llenará en SunatSigner.sign_xml()
 
-    # ── Metadatos del comprobante ─────────────────────────────────
-    _cbc(invoice, 'UBLVersionID', '2.1')
-    _cbc(invoice, 'CustomizationID', '2.0')
+    # Extension 2: AdditionalInformation requerido por SUNAT
+    ext_add = etree.SubElement(extensions, f'{{{EXT}}}UBLExtension')
+    ext_add_content = etree.SubElement(ext_add, f'{{{EXT}}}ExtensionContent')
+    sac_additional = etree.SubElement(ext_add_content, f'{{{SAC}}}AdditionalInformation')
+    sac_monetary = etree.SubElement(sac_additional, f'{{{SAC}}}AdditionalMonetaryTotal')
+    _cbc(sac_monetary, 'ID', '1001')
+    _cbc(sac_monetary, 'PayableAmount', f'{comprobante.subtotal:.2f}', currencyID='PEN')
+
+    # ── Metadatos del comprobante (UBL 2.0) ───────────────────────
+    _cbc(invoice, 'UBLVersionID', '2.0')
+    _cbc(invoice, 'CustomizationID', '1.0' if is_credit_note else '1.1')
+    
+    if not is_credit_note:
+        _cbc(invoice, 'ProfileID', '0101', 
+             schemeName="SUNAT:Identificador de Tipo de Operación", 
+             schemeAgencyName="PE:SUNAT", 
+             schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo17")
+
     _cbc(invoice, 'ID', comprobante.serie_numero)
     _cbc(invoice, 'IssueDate', comprobante.fecha_emision.strftime('%Y-%m-%d'))
-    _cbc(invoice, 'IssueTime', datetime.now().strftime('%H:%M:%S'))
-    _cbc(invoice, 'InvoiceTypeCode', tipo_codigo, 
-         listAgencyName="PE:SUNAT", 
-         listName="Tipo de Documento", 
-         listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01")
+    
+    if not is_credit_note:
+        _cbc(invoice, 'InvoiceTypeCode', tipo_codigo, 
+             listAgencyName="PE:SUNAT", 
+             listURI="urn:pe:sunat:catalog:01",
+             listName="Tipo de Documento",
+             listID="0101")
+             
     _cbc(invoice, 'DocumentCurrencyCode', 'PEN', 
-         listID="ISO 4217 Alpha", 
+         listID="ISO 4217 Alpha",
+         listName="Currency",
          listAgencyName="United Nations Economic Commission for Europe")
+    
+    _cbc(invoice, 'LineCountNumeric', str(len(detalles)))
+
+    if is_credit_note:
+        # Recuperar la nota de crédito de forma segura, incluso si la caché del objeto no la tiene
+        from apps.comprobantes.models import NotaCredito
+        try:
+            nota_info = NotaCredito.objects.get(comprobante_nota=comprobante)
+            # DiscrepancyResponse
+            discrepancy = _cac(invoice, 'DiscrepancyResponse')
+            _cbc(discrepancy, 'ReferenceID', nota_info.comprobante_referencia.serie_numero)
+            _cbc(discrepancy, 'ResponseCode', nota_info.tipo_nota)
+            _cbc(discrepancy, 'Description', nota_info.motivo.strip() if nota_info.motivo and nota_info.motivo.strip() else 'Nota de Crédito')
+            
+            # BillingReference
+            billing_ref = _cac(invoice, 'BillingReference')
+            inv_doc_ref = _cac(billing_ref, 'InvoiceDocumentReference')
+            _cbc(inv_doc_ref, 'ID', nota_info.comprobante_referencia.serie_numero)
+            _cbc(inv_doc_ref, 'DocumentTypeCode', TIPO_DOCUMENTO_SUNAT.get(nota_info.comprobante_referencia.tipo, '01'))
+        except NotaCredito.DoesNotExist:
+            pass
 
     # ── Firma referencia ──────────────────────────────────────────
     signature_ref = _cac(invoice, 'Signature')
-    _cbc(signature_ref, 'ID', 'IDSignKG')
+    _cbc(signature_ref, 'ID', 'SignatureSUNAT')
     sig_party = _cac(signature_ref, 'SignatoryParty')
     sig_party_ident = _cac(sig_party, 'PartyIdentification')
     _cbc(sig_party_ident, 'ID', empresa.ruc)
-    sig_party_name = _cac(sig_party, 'PartyName')
-    _cbc(sig_party_name, 'Name', empresa.razon_social)
-    sig_attach = _cac(signature_ref, 'DigitalSignatureAttachment')
-    sig_ext_ref = _cac(sig_attach, 'ExternalReference')
-    _cbc(sig_ext_ref, 'URI', '#SignatureSP')
 
-    # ═══ AccountingSupplierParty (Empresa emisora) ════════════════
+    # ═══ AccountingSupplierParty (formato UBL 2.0) ═════════════════
     supplier = _cac(invoice, 'AccountingSupplierParty')
+    _cbc(supplier, 'CustomerAssignedAccountID', empresa.ruc)
+    _cbc(supplier, 'AdditionalAccountID', '6')
+    
     supplier_party = _cac(supplier, 'Party')
-
-    supplier_ident = _cac(supplier_party, 'PartyIdentification')
-    _cbc(supplier_ident, 'ID', empresa.ruc,
-         schemeID='6', schemeName='Documento de Identidad',
-         schemeAgencyName='PE:SUNAT', schemeURI='urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06')
-
     supplier_name = _cac(supplier_party, 'PartyName')
-    _cbc(supplier_name, 'Name', empresa.nombre_comercial or empresa.razon_social)
-
+    _cbc(supplier_name, 'Name', empresa.razon_social)
     supplier_legal = _cac(supplier_party, 'PartyLegalEntity')
     _cbc(supplier_legal, 'RegistrationName', empresa.razon_social)
 
-    supplier_addr = _cac(supplier_legal, 'RegistrationAddress')
-    _cbc(supplier_addr, 'AddressTypeCode', '0000')
-    _cbc(supplier_addr, 'CityName', 'Lima')
-    _cbc(supplier_addr, 'CountrySubentity', 'Lima')
-
-    supplier_country = _cac(supplier_addr, 'Country')
-    _cbc(supplier_country, 'IdentificationCode', 'PE',
-         listID='ISO 3166-1', listAgencyName='United Nations Economic Commission for Europe')
-
-    # ═══ AccountingCustomerParty (Cliente) ════════════════════════
+    # ═══ AccountingCustomerParty (formato UBL 2.0) ═════════════════
     customer = _cac(invoice, 'AccountingCustomerParty')
-    customer_party = _cac(customer, 'Party')
-
-    customer_ident = _cac(customer_party, 'PartyIdentification')
     tipo_doc_code = TIPO_DOCUMENTO_IDENTIDAD.get(cliente.tipo_doc, '0')
-    _cbc(customer_ident, 'ID', cliente.num_doc,
-         schemeID=tipo_doc_code, schemeName='Documento de Identidad',
-         schemeAgencyName='PE:SUNAT', schemeURI='urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06')
-
+    _cbc(customer, 'CustomerAssignedAccountID', cliente.num_doc)
+    _cbc(customer, 'AdditionalAccountID', tipo_doc_code)
+    
+    customer_party = _cac(customer, 'Party')
     customer_legal = _cac(customer_party, 'PartyLegalEntity')
     _cbc(customer_legal, 'RegistrationName', cliente.razon_social)
 
@@ -189,8 +219,10 @@ def generar_xml_comprobante(comprobante):
     _cbc(tax_subtotal, 'TaxAmount', f'{comprobante.igv:.2f}', currencyID='PEN')
 
     tax_category = _cac(tax_subtotal, 'TaxCategory')
+    _cbc(tax_category, 'ID', 'S', schemeID='UN/ECE 5305', schemeName='Tax Category Identifier', schemeAgencyName='United Nations Economic Commission for Europe')
+    
     tax_scheme = _cac(tax_category, 'TaxScheme')
-    _cbc(tax_scheme, 'ID', '1000')
+    _cbc(tax_scheme, 'ID', '1000', schemeID='UN/ECE 5153', schemeAgencyID='6')
     _cbc(tax_scheme, 'Name', 'IGV')
     _cbc(tax_scheme, 'TaxTypeCode', 'VAT')
 
@@ -204,8 +236,10 @@ def generar_xml_comprobante(comprobante):
         _cbc(tax_subtotal_inaf, 'TaxAmount', '0.00', currencyID='PEN')
 
         tax_cat_inaf = _cac(tax_subtotal_inaf, 'TaxCategory')
+        _cbc(tax_cat_inaf, 'ID', 'E', schemeID='UN/ECE 5305', schemeName='Tax Category Identifier', schemeAgencyName='United Nations Economic Commission for Europe')
+        
         tax_scheme_inaf = _cac(tax_cat_inaf, 'TaxScheme')
-        _cbc(tax_scheme_inaf, 'ID', '9998')
+        _cbc(tax_scheme_inaf, 'ID', '9998', schemeID='UN/ECE 5153', schemeAgencyID='6')
         _cbc(tax_scheme_inaf, 'Name', 'INA')
         _cbc(tax_scheme_inaf, 'TaxTypeCode', 'FRE')
 
@@ -215,19 +249,28 @@ def generar_xml_comprobante(comprobante):
     _cbc(monetary, 'TaxInclusiveAmount', f'{comprobante.total:.2f}', currencyID='PEN')
     _cbc(monetary, 'PayableAmount', f'{comprobante.total:.2f}', currencyID='PEN')
 
-    # ═══ InvoiceLine (detalle por línea) ══════════════════════════
+    # ═══ InvoiceLine / CreditNoteLine (detalle por línea) ══════════════════════════
+    line_tag = 'CreditNoteLine' if is_credit_note else 'InvoiceLine'
+    qty_tag = 'CreditedQuantity' if is_credit_note else 'InvoicedQuantity'
+    
     for idx, detalle in enumerate(detalles, 1):
-        line = _cac(invoice, 'InvoiceLine')
+        line = _cac(invoice, line_tag)
         _cbc(line, 'ID', str(idx))
-        _cbc(line, 'InvoicedQuantity', f'{detalle.cantidad:.2f}',
+        _cbc(line, qty_tag, f'{detalle.cantidad:.2f}',
              unitCode=detalle.producto.unidad_medida)
         _cbc(line, 'LineExtensionAmount', f'{detalle.subtotal:.2f}', currencyID='PEN')
 
         # PricingReference
         pricing = _cac(line, 'PricingReference')
         alt_price = _cac(pricing, 'AlternativeConditionPrice')
-        _cbc(alt_price, 'PriceAmount', f'{detalle.precio_unitario:.2f}', currencyID='PEN')
-        _cbc(alt_price, 'PriceTypeCode', '01')
+        
+        # El precio debe incluir el IGV para este tag
+        precio_con_igv = detalle.precio_unitario * (Decimal('1.18') if detalle.producto.afecto_igv else Decimal('1.00'))
+        _cbc(alt_price, 'PriceAmount', f'{precio_con_igv:.2f}', currencyID='PEN')
+        _cbc(alt_price, 'PriceTypeCode', '01', 
+             listName='SUNAT:Indicador de Tipo de Precio', 
+             listAgencyName='PE:SUNAT', 
+             listURI='urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo16')
 
         # AllowanceCharge — Descuento por línea (DEBE ir antes de TaxTotal según UBL 2.1)
         if detalle.descuento > 0:
@@ -249,16 +292,20 @@ def generar_xml_comprobante(comprobante):
         _cbc(line_tax_sub, 'TaxAmount', f'{detalle.igv_linea:.2f}', currencyID='PEN')
 
         line_tax_cat = _cac(line_tax_sub, 'TaxCategory')
-        _cbc(line_tax_cat, 'Percent', '18.00')
+        _cbc(line_tax_cat, 'ID', 'S' if detalle.producto.afecto_igv else 'E', 
+             schemeID='UN/ECE 5305', schemeName='Tax Category Identifier', schemeAgencyName='United Nations Economic Commission for Europe')
+        _cbc(line_tax_cat, 'Percent', '18.00' if detalle.producto.afecto_igv else '0.00')
 
         # Determinar tipo de afectación
         if detalle.producto.afecto_igv:
-            _cbc(line_tax_cat, 'TaxExemptionReasonCode', '10')
+            _cbc(line_tax_cat, 'TaxExemptionReasonCode', '10', 
+                 listAgencyName='PE:SUNAT', listName='SUNAT:Codigo de Tipo de Afectación del IGV', listURI='urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo07')
         else:
-            _cbc(line_tax_cat, 'TaxExemptionReasonCode', '30')
+            _cbc(line_tax_cat, 'TaxExemptionReasonCode', '30', 
+                 listAgencyName='PE:SUNAT', listName='SUNAT:Codigo de Tipo de Afectación del IGV', listURI='urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo07')
 
         line_tax_scheme = _cac(line_tax_cat, 'TaxScheme')
-        _cbc(line_tax_scheme, 'ID', '1000' if detalle.producto.afecto_igv else '9998')
+        _cbc(line_tax_scheme, 'ID', '1000' if detalle.producto.afecto_igv else '9998', schemeID='UN/ECE 5153', schemeAgencyID='6')
         _cbc(line_tax_scheme, 'Name', 'IGV' if detalle.producto.afecto_igv else 'INA')
         _cbc(line_tax_scheme, 'TaxTypeCode', 'VAT' if detalle.producto.afecto_igv else 'FRE')
 

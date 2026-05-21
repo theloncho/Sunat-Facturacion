@@ -207,7 +207,7 @@ def transicionar_estado(comprobante, nuevo_estado):
 
 
 @transaction.atomic
-def generar_numero_correlativo(empresa, tipo_comprobante):
+def generar_numero_correlativo(empresa, tipo_comprobante, comprobante_ref=None):
     """
     Genera el siguiente número correlativo para una serie de comprobante.
     Usa select_for_update() para evitar condiciones de carrera y garantizar
@@ -216,13 +216,20 @@ def generar_numero_correlativo(empresa, tipo_comprobante):
     Returns:
         tuple (serie_str, numero_int)
     """
+    from apps.empresa.models import SerieComprobante
+    
     tipo_map = {
         Comprobante.TipoComprobante.FACTURA: SerieComprobante.TipoComprobante.FACTURA,
         Comprobante.TipoComprobante.BOLETA: SerieComprobante.TipoComprobante.BOLETA,
-        Comprobante.TipoComprobante.NOTA_CREDITO: SerieComprobante.TipoComprobante.NOTA_CREDITO,
     }
-
-    serie_tipo = tipo_map[tipo_comprobante]
+    
+    if tipo_comprobante == Comprobante.TipoComprobante.NOTA_CREDITO:
+        if comprobante_ref and comprobante_ref.tipo == Comprobante.TipoComprobante.BOLETA:
+            serie_tipo = SerieComprobante.TipoComprobante.NOTA_CREDITO_BOLETA
+        else:
+            serie_tipo = SerieComprobante.TipoComprobante.NOTA_CREDITO
+    else:
+        serie_tipo = tipo_map[tipo_comprobante]
 
     serie = (
         SerieComprobante.objects
@@ -351,7 +358,11 @@ def emitir_nota_credito(empresa, comprobante_ref, motivo, tipo_nota, monto_afect
         )
 
     # Generar número correlativo para la nota de crédito
-    serie, numero = generar_numero_correlativo(empresa, Comprobante.TipoComprobante.NOTA_CREDITO)
+    serie, numero = generar_numero_correlativo(
+        empresa, 
+        Comprobante.TipoComprobante.NOTA_CREDITO, 
+        comprobante_ref=comprobante_ref
+    )
 
     # Calcular IGV proporcional de la NC
     if comprobante_ref.subtotal > 0:
@@ -384,6 +395,29 @@ def emitir_nota_credito(empresa, comprobante_ref, motivo, tipo_nota, monto_afect
         tipo_nota=tipo_nota,
         monto_afectado=monto_afectado,
     )
+
+    # Clonar los detalles del comprobante original proporcionalmente
+    from apps.comprobantes.models import DetalleComprobante
+    
+    detalles_nuevos = []
+    for det_ref in comprobante_ref.detalles.all():
+        nueva_cantidad = det_ref.cantidad * proporcion
+        nuevo_igv_linea = (det_ref.igv_linea * proporcion).quantize(QUANTIZE_2, rounding=ROUND_HALF_UP)
+        nuevo_subtotal = (det_ref.subtotal * proporcion).quantize(QUANTIZE_2, rounding=ROUND_HALF_UP)
+        
+        detalles_nuevos.append(
+            DetalleComprobante(
+                comprobante=comprobante_nc,
+                producto=det_ref.producto,
+                cantidad=nueva_cantidad.quantize(Decimal('.01'), rounding=ROUND_HALF_UP),
+                precio_unitario=det_ref.precio_unitario,
+                descuento=det_ref.descuento,
+                igv_linea=nuevo_igv_linea,
+                subtotal=nuevo_subtotal
+            )
+        )
+    DetalleComprobante.objects.bulk_create(detalles_nuevos)
+
 
     # Generar XML y enviar
     xml_content, hash_cpe = generar_xml_comprobante(comprobante_nc)
