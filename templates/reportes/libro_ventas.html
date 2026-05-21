@@ -26,8 +26,8 @@
       <button type="submit" class="btn btn-primary-custom"><i class="bi bi-search me-2"></i>Consultar</button>
     </div>
     <div class="col-md-3 text-end">
-      <a href="{% url 'exportar-csv' %}?mes={{ mes }}&anio={{ anio }}" class="btn btn-outline-custom">
-        <i class="bi bi-download me-2"></i>Exportar CSV
+      <a href="{% url 'exportar-excel' %}?mes={{ mes }}&anio={{ anio }}" class="btn btn-outline-custom">
+        <i class="bi bi-file-earmark-excel me-2"></i>Exportar Excel
       </a>
     </div>
   </form>

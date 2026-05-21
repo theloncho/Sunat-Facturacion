@@ -5,7 +5,9 @@ from django.http import HttpResponse
 from django.db.models import Sum, Count, Q
 from django.utils import timezone
 from decimal import Decimal
-import csv
+import openpyxl
+from openpyxl.styles import Font, Alignment, PatternFill
+from openpyxl.utils import get_column_letter
 from apps.comprobantes.models import Comprobante
 
 
@@ -64,8 +66,8 @@ def libro_ventas_view(request):
 
 
 @login_required
-def exportar_csv_view(request):
-    """Exportar libro de ventas a CSV."""
+def exportar_excel_view(request):
+    """Exportar libro de ventas a Excel con formato."""
     mes = request.GET.get('mes')
     anio = request.GET.get('anio')
 
@@ -75,19 +77,49 @@ def exportar_csv_view(request):
     if mes and anio:
         qs = qs.filter(fecha_emision__month=int(mes), fecha_emision__year=int(anio))
 
-    response = HttpResponse(content_type='text/csv')
-    response['Content-Disposition'] = f'attachment; filename="libro_ventas_{anio}_{mes}.csv"'
-    response.write('\ufeff')  # BOM for Excel
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = f"Ventas {anio}-{mes}"
 
-    writer = csv.writer(response)
-    writer.writerow(['Fecha', 'Serie-Número', 'Tipo', 'Cliente', 'RUC/DNI',
-                     'Base Imponible', 'IGV', 'Total', 'Estado SUNAT'])
+    # Estilos
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill("solid", fgColor="1A237E") # Azul oscuro
+    alignment = Alignment(horizontal="center", vertical="center")
+    
+    headers = ['Fecha', 'Serie-Número', 'Tipo', 'Cliente', 'RUC/DNI',
+               'Base Imponible', 'IGV', 'Total', 'Estado SUNAT']
+    
+    ws.append(headers)
+    for col_num in range(1, len(headers) + 1):
+        cell = ws.cell(row=1, column=col_num)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = alignment
 
     for c in qs.order_by('fecha_emision'):
-        writer.writerow([
-            c.fecha_emision, c.serie_numero, c.get_tipo_display(),
-            c.cliente.razon_social, c.cliente.num_doc,
-            c.subtotal, c.igv, c.total, c.estado,
+        ws.append([
+            c.fecha_emision.strftime('%Y-%m-%d'), 
+            c.serie_numero, 
+            c.get_tipo_display(),
+            c.cliente.razon_social, 
+            c.cliente.num_doc,
+            float(c.subtotal), 
+            float(c.igv), 
+            float(c.total), 
+            c.estado,
         ])
+        
+    # Formato de números y anchos de columna
+    for row in ws.iter_rows(min_row=2, max_row=ws.max_row, min_col=6, max_col=8):
+        for cell in row:
+            cell.number_format = '#,##0.00'
+
+    column_widths = [12, 15, 12, 40, 15, 15, 12, 15, 15]
+    for i, width in enumerate(column_widths, 1):
+        ws.column_dimensions[get_column_letter(i)].width = width
+
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = f'attachment; filename="libro_ventas_{anio}_{mes}.xlsx"'
+    wb.save(response)
 
     return response

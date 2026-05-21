@@ -223,11 +223,22 @@ def generar_xml_comprobante(comprobante):
              unitCode=detalle.producto.unidad_medida)
         _cbc(line, 'LineExtensionAmount', f'{detalle.subtotal:.2f}', currencyID='PEN')
 
-        # Pricing
+        # PricingReference
         pricing = _cac(line, 'PricingReference')
         alt_price = _cac(pricing, 'AlternativeConditionPrice')
         _cbc(alt_price, 'PriceAmount', f'{detalle.precio_unitario:.2f}', currencyID='PEN')
         _cbc(alt_price, 'PriceTypeCode', '01')
+
+        # AllowanceCharge — Descuento por línea (DEBE ir antes de TaxTotal según UBL 2.1)
+        if detalle.descuento > 0:
+            allowance = _cac(line, 'AllowanceCharge')
+            _cbc(allowance, 'ChargeIndicator', 'false')
+            _cbc(allowance, 'AllowanceChargeReasonCode', '00')
+            _cbc(allowance, 'MultiplierFactorNumeric', f'{detalle.descuento / 100:.4f}')
+            base_amount = detalle.cantidad * detalle.precio_unitario
+            desc_monto = base_amount * (detalle.descuento / 100)
+            _cbc(allowance, 'Amount', f'{desc_monto:.2f}', currencyID='PEN')
+            _cbc(allowance, 'BaseAmount', f'{base_amount:.2f}', currencyID='PEN')
 
         # TaxTotal por línea
         line_tax = _cac(line, 'TaxTotal')
@@ -257,17 +268,6 @@ def generar_xml_comprobante(comprobante):
 
         sellers_ident = _cac(item, 'SellersItemIdentification')
         _cbc(sellers_ident, 'ID', detalle.producto.codigo)
-
-        # Descuento por línea (si aplica)
-        if detalle.descuento > 0:
-            allowance = _cac(line, 'AllowanceCharge')
-            _cbc(allowance, 'ChargeIndicator', 'false')
-            _cbc(allowance, 'AllowanceChargeReasonCode', '00')
-            _cbc(allowance, 'MultiplierFactorNumeric', f'{detalle.descuento / 100:.4f}')
-            base_amount = detalle.cantidad * detalle.precio_unitario
-            desc_monto = base_amount * (detalle.descuento / 100)
-            _cbc(allowance, 'Amount', f'{desc_monto:.2f}', currencyID='PEN')
-            _cbc(allowance, 'BaseAmount', f'{base_amount:.2f}', currencyID='PEN')
 
         # Price
         price = _cac(line, 'Price')
