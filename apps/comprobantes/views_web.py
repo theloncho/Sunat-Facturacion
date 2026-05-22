@@ -99,6 +99,8 @@ def lista_comprobantes_view(request):
     fecha_hasta = request.GET.get('fecha_hasta')
     buscar = request.GET.get('buscar')
 
+    orden = request.GET.get('orden', 'desc')
+
     if tipo:
         qs = qs.filter(tipo=tipo)
     if estado:
@@ -114,12 +116,15 @@ def lista_comprobantes_view(request):
             Q(serie__icontains=buscar)
         )
 
-    comprobantes = qs.order_by('-fecha_emision', '-numero')[:100]
+    if orden == 'asc':
+        comprobantes = qs.order_by('fecha_emision', 'numero')[:100]
+    else:
+        comprobantes = qs.order_by('-fecha_emision', '-numero')[:100]
 
     return render(request, 'comprobantes/lista.html', {
         'comprobantes': comprobantes,
         'filtros': {'tipo': tipo, 'estado': estado, 'fecha_desde': fecha_desde,
-                    'fecha_hasta': fecha_hasta, 'buscar': buscar},
+                    'fecha_hasta': fecha_hasta, 'buscar': buscar, 'orden': orden},
     })
 
 
@@ -149,6 +154,24 @@ def pdf_comprobante_view(request, pk):
     response['Content-Disposition'] = f'inline; filename="{comprobante.serie_numero}.pdf"'
     return response
 
+
+@login_required
+def descargar_xml_view(request, pk):
+    """Descargar el XML firmado del comprobante."""
+    qs = Comprobante.objects.all()
+    if request.user.empresa:
+        qs = qs.filter(empresa=request.user.empresa)
+    if request.user.is_emisor:
+        qs = qs.filter(created_by=request.user)
+    
+    comprobante = get_object_or_404(qs, pk=pk)
+    if not comprobante.xml_firmado:
+        messages.error(request, 'Este comprobante aún no tiene un XML generado.')
+        return redirect('comprobante-detalle', pk=pk)
+        
+    response = HttpResponse(comprobante.xml_firmado, content_type='application/xml')
+    response['Content-Disposition'] = f'attachment; filename="{comprobante.empresa.ruc}-{comprobante.tipo}-{comprobante.serie_numero}.xml"'
+    return response
 
 @csrf_exempt
 @login_required

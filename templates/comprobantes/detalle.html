@@ -92,6 +92,9 @@
         <a href="{% url 'comprobante-pdf' comprobante.pk %}" class="btn btn-primary-custom" target="_blank">
           <i class="bi bi-file-pdf me-2"></i>Descargar PDF
         </a>
+        <a href="{% url 'comprobante-xml' comprobante.pk %}" class="btn btn-outline-custom" target="_blank">
+          <i class="bi bi-filetype-xml me-2"></i>Descargar XML
+        </a>
         <button onclick="window.print()" class="btn btn-outline-custom">
           <i class="bi bi-printer me-2"></i>Imprimir
         </button>

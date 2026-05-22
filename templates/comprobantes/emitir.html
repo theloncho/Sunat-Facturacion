@@ -73,9 +73,9 @@
                   {% endfor %}
                 </select>
               </td>
-              <td><input type="number" class="form-control form-control-sm" x-model.number="linea.cantidad" @input="calcularLinea(idx)" min="0.01" step="0.01"></td>
-              <td><input type="number" class="form-control form-control-sm" x-model.number="linea.precio_unitario" @input="calcularLinea(idx)" min="0.01" step="0.01"></td>
-              <td><input type="number" class="form-control form-control-sm" x-model.number="linea.descuento" @input="calcularLinea(idx)" min="0" max="100" step="0.1"></td>
+              <td><input type="number" class="form-control form-control-sm" x-model.number="linea.cantidad" @input="calcularLinea(idx)" min="1" step="1" oninput="this.value = Math.max(1, Math.floor(this.value))"></td>
+              <td><input type="number" class="form-control form-control-sm" x-model.number="linea.precio_unitario" readonly style="background-color: var(--bg-card); color: var(--text-secondary);"></td>
+              <td><input type="number" class="form-control form-control-sm" x-model.number="linea.descuento" @input="calcularLinea(idx)" min="0" max="100" step="0.1" oninput="if(this.value < 0) this.value = 0; if(this.value > 100) this.value = 100;"></td>
               <td style="color:var(--accent);" x-text="'S/.' + linea.igv_linea.toFixed(2)"></td>
               <td><strong x-text="'S/.' + linea.subtotal.toFixed(2)"></strong></td>
               <td><button class="btn btn-sm" style="color:var(--danger);" @click="eliminarLinea(idx)"><i class="bi bi-trash"></i></button></td>
