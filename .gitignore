@@ -24,3 +24,4 @@ certificates/*.pfx
 certificates/*.pem
 certificates/*.crt
 certificates/*.key
+cdrs/

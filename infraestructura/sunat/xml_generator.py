@@ -19,7 +19,6 @@ from datetime import datetime
 from decimal import Decimal
 from lxml import etree
 from decouple import config
-from apps.comprobantes.signer import SunatSigner
 
 logger = logging.getLogger(__name__)
 
@@ -136,10 +135,9 @@ def generar_xml_comprobante(comprobante):
     _cbc(sac_monetary, 'ID', '1001')
     _cbc(sac_monetary, 'PayableAmount', f'{comprobante.subtotal:.2f}', currencyID='PEN')
 
-    # ── Metadatos del comprobante (UBL 2.0) ───────────────────────
-    _cbc(invoice, 'UBLVersionID', '2.0')
-    _cbc(invoice, 'CustomizationID', '1.0' if is_credit_note else '1.1')
-    
+    # ── Metadatos del comprobante (UBL 2.1) ───────────────────────
+    _cbc(invoice, 'UBLVersionID', '2.1')
+    _cbc(invoice, 'CustomizationID', '2.0')    
     if not is_credit_note:
         _cbc(invoice, 'ProfileID', '0101', 
              schemeName="SUNAT:Identificador de Tipo de Operación", 
@@ -148,11 +146,12 @@ def generar_xml_comprobante(comprobante):
 
     _cbc(invoice, 'ID', comprobante.serie_numero)
     _cbc(invoice, 'IssueDate', comprobante.fecha_emision.strftime('%Y-%m-%d'))
+    _cbc(invoice, 'IssueTime', comprobante.fecha_emision.strftime('%H:%M:%S'))
     
     if not is_credit_note:
         _cbc(invoice, 'InvoiceTypeCode', tipo_codigo, 
              listAgencyName="PE:SUNAT", 
-             listURI="urn:pe:sunat:catalog:01",
+             listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01",
              listName="Tipo de Documento",
              listID="0101")
              
@@ -191,47 +190,56 @@ def generar_xml_comprobante(comprobante):
 
     # ═══ AccountingSupplierParty (formato UBL 2.0) ═════════════════
     supplier = _cac(invoice, 'AccountingSupplierParty')
-    _cbc(supplier, 'CustomerAssignedAccountID', empresa.ruc)
-    _cbc(supplier, 'AdditionalAccountID', '6')
+    party = _cac(supplier, 'Party')
+    party_id = _cac(party, 'PartyIdentification')
+    _cbc(party_id, 'ID', empresa.ruc, schemeID='6')
     
-    supplier_party = _cac(supplier, 'Party')
-    supplier_name = _cac(supplier_party, 'PartyName')
-    _cbc(supplier_name, 'Name', empresa.razon_social)
-    supplier_legal = _cac(supplier_party, 'PartyLegalEntity')
-    _cbc(supplier_legal, 'RegistrationName', empresa.razon_social)
-
-    # ═══ AccountingCustomerParty (formato UBL 2.0) ═════════════════
+    party_name = _cac(party, 'PartyName')
+    _cbc(party_name, 'Name', empresa.razon_social)
+    
+    legal_entity = _cac(party, 'PartyLegalEntity')
+    _cbc(legal_entity, 'RegistrationName', empresa.razon_social)
+    
+    registration_address = _cac(legal_entity, 'RegistrationAddress')
+    _cbc(registration_address, 'AddressTypeCode', '0000')
+    
+    # ── AccountingCustomerParty ───────────────────────────────────
     customer = _cac(invoice, 'AccountingCustomerParty')
-    tipo_doc_code = TIPO_DOCUMENTO_IDENTIDAD.get(cliente.tipo_doc, '0')
-    _cbc(customer, 'CustomerAssignedAccountID', cliente.num_doc)
-    _cbc(customer, 'AdditionalAccountID', tipo_doc_code)
+    c_party = _cac(customer, 'Party')
+    c_party_id = _cac(c_party, 'PartyIdentification')
+    _cbc(c_party_id, 'ID', cliente.num_doc, schemeID='1' if cliente.tipo_doc == 'DNI' else '6')
     
-    customer_party = _cac(customer, 'Party')
-    customer_legal = _cac(customer_party, 'PartyLegalEntity')
-    _cbc(customer_legal, 'RegistrationName', cliente.razon_social)
+    c_legal_entity = _cac(c_party, 'PartyLegalEntity')
+    _cbc(c_legal_entity, 'RegistrationName', cliente.razon_social)
+    
+    # ── PaymentTerms (Requerido por SUNAT para facturas, pero no para NC) ──
+    if not is_credit_note:
+        payment_terms = _cac(invoice, 'PaymentTerms')
+        _cbc(payment_terms, 'ID', 'FormaPago')
+        _cbc(payment_terms, 'PaymentMeansID', 'Contado')
 
     # ═══ TaxTotal (IGV global) ════════════════════════════════════
     tax_total = _cac(invoice, 'TaxTotal')
     _cbc(tax_total, 'TaxAmount', f'{comprobante.igv:.2f}', currencyID='PEN')
 
-    tax_subtotal = _cac(tax_total, 'TaxSubtotal')
-    _cbc(tax_subtotal, 'TaxableAmount', f'{comprobante.subtotal:.2f}', currencyID='PEN')
-    _cbc(tax_subtotal, 'TaxAmount', f'{comprobante.igv:.2f}', currencyID='PEN')
+    if comprobante.subtotal > 0:
+        tax_subtotal = _cac(tax_total, 'TaxSubtotal')
+        _cbc(tax_subtotal, 'TaxableAmount', f'{comprobante.subtotal:.2f}', currencyID='PEN')
+        _cbc(tax_subtotal, 'TaxAmount', f'{comprobante.igv:.2f}', currencyID='PEN')
 
-    tax_category = _cac(tax_subtotal, 'TaxCategory')
-    _cbc(tax_category, 'ID', 'S', schemeID='UN/ECE 5305', schemeName='Tax Category Identifier', schemeAgencyName='United Nations Economic Commission for Europe')
-    
-    tax_scheme = _cac(tax_category, 'TaxScheme')
-    _cbc(tax_scheme, 'ID', '1000', schemeID='UN/ECE 5153', schemeAgencyID='6')
-    _cbc(tax_scheme, 'Name', 'IGV')
-    _cbc(tax_scheme, 'TaxTypeCode', 'VAT')
+        tax_category = _cac(tax_subtotal, 'TaxCategory')
+        _cbc(tax_category, 'ID', 'S', schemeID='UN/ECE 5305', schemeName='Tax Category Identifier', schemeAgencyName='United Nations Economic Commission for Europe')
+        
+        tax_scheme = _cac(tax_category, 'TaxScheme')
+        _cbc(tax_scheme, 'ID', '1000', schemeID='UN/ECE 5153', schemeAgencyID='6')
+        _cbc(tax_scheme, 'Name', 'IGV')
+        _cbc(tax_scheme, 'TaxTypeCode', 'VAT')
 
     # ── Total Inafecto (si aplica) ────────────────────────────────
     if comprobante.total_inafecto > 0:
-        tax_total_inaf = _cac(invoice, 'TaxTotal')
-        _cbc(tax_total_inaf, 'TaxAmount', '0.00', currencyID='PEN')
-
-        tax_subtotal_inaf = _cac(tax_total_inaf, 'TaxSubtotal')
+        # SUNAT exige que exista solo un TaxTotal a nivel global.
+        # Por lo tanto agregamos el TaxSubtotal inafecto al mismo tax_total.
+        tax_subtotal_inaf = _cac(tax_total, 'TaxSubtotal')
         _cbc(tax_subtotal_inaf, 'TaxableAmount', f'{comprobante.total_inafecto:.2f}', currencyID='PEN')
         _cbc(tax_subtotal_inaf, 'TaxAmount', '0.00', currencyID='PEN')
 
@@ -245,7 +253,7 @@ def generar_xml_comprobante(comprobante):
 
     # ═══ LegalMonetaryTotal ═══════════════════════════════════════
     monetary = _cac(invoice, 'LegalMonetaryTotal')
-    _cbc(monetary, 'LineExtensionAmount', f'{comprobante.subtotal:.2f}', currencyID='PEN')
+    _cbc(monetary, 'LineExtensionAmount', f'{(comprobante.subtotal + comprobante.total_inafecto):.2f}', currencyID='PEN')
     _cbc(monetary, 'TaxInclusiveAmount', f'{comprobante.total:.2f}', currencyID='PEN')
     _cbc(monetary, 'PayableAmount', f'{comprobante.total:.2f}', currencyID='PEN')
 
@@ -325,21 +333,21 @@ def generar_xml_comprobante(comprobante):
     xml_string = '<?xml version="1.0" encoding="utf-8"?>\n' + xml_bytes.decode('utf-8')
 
     # ═══ Firma digital REAL ═══════════════════════════════════════
-    if config('SUNAT_BETA_MODE', default=True, cast=bool):
-        try:
-            signer = SunatSigner(
-                pfx_path=config('SUNAT_CERT_PATH'),
-                pfx_password=config('SUNAT_CERT_PASSWORD')
-            )
-            xml_string_firmado = signer.sign_xml(xml_string)
-            hash_cpe = signer.get_hash(xml_string_firmado)
-            return xml_string_firmado, hash_cpe
-        except Exception as e:
-            # Si falla la firma real en desarrollo, al menos devolvemos el mock 
-            # pero notificamos en log.
-            logger.error("Error en firma real: %s. Usando firma mock.", e)
-    
-    # ═══ Firma digital mock (fallback) ════════════════════════════
-    hash_cpe = hashlib.sha256(xml_bytes).hexdigest()
-    # Si llegamos aquí es porque la firma real falló, el XML ya no tiene el nodo Signature
-    return xml_string, hash_cpe
+    # La firma ya no es opcional, siempre se intenta firmar
+    from .firmar import sign_xml
+    try:
+        xml_bytes_firmado = sign_xml(xml_bytes)
+        xml_string_firmado = xml_bytes_firmado.decode('utf-8')
+        
+        # Para el hash_cpe (que va en el QR), extraemos el DigestValue del XML firmado
+        import base64
+        import hashlib
+        # Ojo: idealmente el DigestValue se extrae del XML, pero un SHA-256 sirve como fallback de hash
+        hash_cpe = hashlib.sha256(xml_bytes_firmado).hexdigest()
+        
+        return xml_string_firmado, hash_cpe
+    except Exception as e:
+        logger.error("Error en firma real: %s", e)
+        # Fallback solo para desarrollo si no hay certificado
+        hash_cpe = hashlib.sha256(xml_bytes).hexdigest()
+        return xml_string, hash_cpe

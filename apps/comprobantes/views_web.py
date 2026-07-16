@@ -113,11 +113,10 @@ def emitir_comprobante_view(request):
                 'estado': comprobante.estado,
             })
         except ComprobanteException as e:
-            print(f"COMPROBANTE EXCEPTION: {e}")
+            logger.exception(f"COMPROBANTE EXCEPTION: {e}")
             return JsonResponse({'success': False, 'error': str(e), 'codigo': getattr(e, 'codigo_error', 'ERR_DESCONOCIDO')}, status=400)
         except Exception as e:
-            import traceback
-            traceback.print_exc()
+            logger.exception(f"UNEXPECTED EXCEPTION: {e}")
             return JsonResponse({'success': False, 'error': str(e)}, status=400)
 
     productos = Producto.objects.filter(activo=True)
@@ -256,11 +255,10 @@ def nota_credito_view(request):
                 'comprobante_id': comprobante_nc.id,
             })
         except ComprobanteException as e:
-            print(f"COMPROBANTE EXCEPTION NC: {e}")
+            logger.exception(f"COMPROBANTE EXCEPTION NC: {e}")
             return JsonResponse({'success': False, 'error': str(e), 'codigo': getattr(e, 'codigo_error', 'ERR_DESCONOCIDO')}, status=400)
         except Exception as e:
-            import traceback
-            traceback.print_exc()
+            logger.exception(f"UNEXPECTED EXCEPTION NC: {e}")
             return JsonResponse({'success': False, 'error': str(e)}, status=400)
 
     return render(request, 'comprobantes/nota_credito.html', {

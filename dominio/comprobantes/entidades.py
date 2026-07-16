@@ -69,6 +69,15 @@ class Comprobante:
     def serie_numero(self) -> str:
         return f"{self.serie}-{self.numero:08d}"
 
+    @property
+    def tipo_sunat(self) -> str:
+        mapping = {
+            'FACTURA': '01',
+            'BOLETA': '03',
+            'NOTA_CREDITO': '07'
+        }
+        return mapping.get(self.tipo, '01')
+
 
 @dataclass
 class NotaCredito:
