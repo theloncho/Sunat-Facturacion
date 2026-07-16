@@ -1,5 +1,4 @@
 from django.db import models
-from django.core.validators import RegexValidator, MinLengthValidator
 from django.core.exceptions import ValidationError
 from apps.utils.models import ModeloBase
 

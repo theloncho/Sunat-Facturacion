@@ -13,12 +13,9 @@ Genera XML con estructura UBL 2.1 que incluye:
 La firma digital es un mock (hash SHA-256 del contenido XML).
 En producción se reemplazaría con una firma real usando certificado digital.
 """
-import hashlib
 import logging
-from datetime import datetime
 from decimal import Decimal
 from lxml import etree
-from decouple import config
 
 logger = logging.getLogger(__name__)
 
@@ -125,7 +122,7 @@ def generar_xml_comprobante(comprobante):
     
     # Extension 1: Para la firma digital (se llenará en SunatSigner.sign_xml())
     extension = etree.SubElement(extensions, f'{{{EXT}}}UBLExtension')
-    ext_content = etree.SubElement(extension, f'{{{EXT}}}ExtensionContent')
+    etree.SubElement(extension, f'{{{EXT}}}ExtensionContent')
 
     # Extension 2: AdditionalInformation requerido por SUNAT
     ext_add = etree.SubElement(extensions, f'{{{EXT}}}UBLExtension')
@@ -340,7 +337,6 @@ def generar_xml_comprobante(comprobante):
         xml_string_firmado = xml_bytes_firmado.decode('utf-8')
         
         # Para el hash_cpe (que va en el QR), extraemos el DigestValue del XML firmado
-        import base64
         import hashlib
         # Ojo: idealmente el DigestValue se extrae del XML, pero un SHA-256 sirve como fallback de hash
         hash_cpe = hashlib.sha256(xml_bytes_firmado).hexdigest()

@@ -3,13 +3,13 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import JsonResponse, HttpResponse
-from django.db.models import Sum, Count, Q
+from django.db.models import Sum, Q
 from django.utils import timezone
-from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
+from django.views.decorators.csrf import csrf_exempt
 from decimal import Decimal
 import json
 
-from .models import Comprobante, DetalleComprobante
+from .models import Comprobante
 from dominio.comprobantes.servicios import FacturaService, BoletaService, NotaCreditoService
 from dominio.comprobantes.excepciones import ComprobanteException
 from dominio.comprobantes.entidades import Cliente as DominioCliente, Empresa as DominioEmpresa
@@ -21,7 +21,6 @@ from infraestructura.sunat.cliente_ose import DjangoSunatClient
 from .pdf_generator import generar_pdf_comprobante
 from apps.clientes.models import Cliente
 from apps.productos.models import Producto
-from apps.empresa.models import SerieComprobante
 
 
 @login_required

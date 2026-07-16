@@ -6,7 +6,6 @@ from apps.accounts.models import CustomUser
 from apps.empresa.models import Empresa, SerieComprobante
 from apps.clientes.models import Cliente
 from apps.productos.models import Producto
-from apps.comprobantes.models import Comprobante
 
 
 @pytest.mark.django_db

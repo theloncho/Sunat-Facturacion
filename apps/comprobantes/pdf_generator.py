@@ -3,13 +3,12 @@ Generador de PDF para comprobantes electrónicos en formato voucher.
 Usa ReportLab para crear PDFs con formato profesional.
 """
 from io import BytesIO
-from decimal import Decimal
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
+from reportlab.lib.enums import TA_CENTER
 
 
 def generar_pdf_comprobante(comprobante):
@@ -23,7 +22,6 @@ def generar_pdf_comprobante(comprobante):
     title_style = ParagraphStyle('Title2', parent=styles['Title'], fontSize=14, spaceAfter=6)
     subtitle_style = ParagraphStyle('Sub', parent=styles['Normal'], fontSize=10, alignment=TA_CENTER)
     normal = styles['Normal']
-    bold_style = ParagraphStyle('Bold', parent=normal, fontName='Helvetica-Bold')
 
     elements = []
 

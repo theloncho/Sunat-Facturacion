@@ -3,7 +3,6 @@ import os
 import base64
 import hashlib
 from lxml import etree
-from django.conf import settings
 
 logger = logging.getLogger(__name__)
 

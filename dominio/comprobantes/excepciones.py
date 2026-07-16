@@ -21,7 +21,6 @@ class AccesoNoAutorizado(AppError):
 # Específicas del dominio Comprobantes
 class ComprobanteException(ReglaNegocioViolada):
     """Excepción general para lógica de comprobantes."""
-    pass
 
 
 class ValidacionClienteException(ComprobanteException):

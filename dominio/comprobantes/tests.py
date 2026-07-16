@@ -1,14 +1,13 @@
 import unittest
 from decimal import Decimal
-from typing import Tuple, List, Optional
-from datetime import datetime
+from typing import Tuple, List
 
 from dominio.comprobantes.entidades import (
-    Comprobante, DetalleComprobante, Cliente, Empresa, Producto, NotaCredito
+    Comprobante, Cliente, Empresa, Producto, NotaCredito
 )
-from dominio.comprobantes.servicios import FacturaService, BoletaService, NotaCreditoService
+from dominio.comprobantes.servicios import FacturaService, BoletaService
 from dominio.comprobantes.excepciones import (
-    ValidacionClienteException, ComprobanteException
+    ValidacionClienteException
 )
 from dominio.comprobantes.puertos import (
     IComprobanteRepository, INumeracionRepository, IProductoRepository, ISunatClient

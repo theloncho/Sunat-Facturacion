@@ -1,6 +1,5 @@
 """Auth serializers y API views."""
 from rest_framework import serializers
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from apps.accounts.models import CustomUser
 
 

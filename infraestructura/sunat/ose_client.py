@@ -6,11 +6,9 @@ Usa zeep con WSDL local para máxima compatibilidad y seguridad.
 import logging
 import os
 import base64
-from django.conf import settings
 from zeep import Client, Settings
 from zeep.transports import Transport
 from zeep.wsse.username import UsernameToken
-import requests
 from decouple import config
 
 logger = logging.getLogger(__name__)

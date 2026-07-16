@@ -8,7 +8,6 @@ Todos los modelos del sistema deben heredar de ModeloBase para garantizar:
 """
 from django.db import models
 from django.conf import settings
-from django.utils import timezone
 
 
 class ManagerActivos(models.Manager):

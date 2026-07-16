@@ -1,4 +1,4 @@
-from typing import Tuple, List, Optional
+from typing import Tuple, List
 from django.db import transaction
 from apps.comprobantes.models import Comprobante as DjangoComprobante
 from apps.comprobantes.models import DetalleComprobante as DjangoDetalle

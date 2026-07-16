@@ -1,6 +1,5 @@
-from typing import Protocol, List, Tuple, Optional
-from decimal import Decimal
-from .entidades import Comprobante, DetalleComprobante, NotaCredito, Cliente, Empresa, Producto
+from typing import Protocol, List, Tuple
+from .entidades import Comprobante, NotaCredito, Producto
 
 class IComprobanteRepository(Protocol):
     def guardar_comprobante_y_detalles(self, comprobante: Comprobante) -> Comprobante:

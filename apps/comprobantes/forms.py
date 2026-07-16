@@ -1,6 +1,5 @@
 """Formularios Django para comprobantes."""
 from django import forms
-from apps.clientes.models import Cliente
 from apps.comprobantes.models import NotaCredito
 
 
