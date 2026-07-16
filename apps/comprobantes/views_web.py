@@ -35,11 +35,32 @@ def dashboard_view(request):
     stats = {
         'total_facturas': mes_qs.filter(tipo='FACTURA').count(),
         'total_boletas': mes_qs.filter(tipo='BOLETA').count(),
+        'total_notas': mes_qs.filter(tipo='NOTA_CREDITO').count(),
         'monto_total': mes_qs.aggregate(t=Sum('total'))['t'] or Decimal('0.00'),
         'rechazados': mes_qs.filter(estado='RECHAZADO').count(),
         'aceptados': mes_qs.filter(estado='ACEPTADO').count(),
         'pendientes': mes_qs.filter(estado__in=['BORRADOR', 'EMITIDO', 'ENVIADO']).count(),
     }
+
+    facturas = stats['total_facturas']
+    boletas = stats['total_boletas']
+    notas = stats['total_notas']
+    total = facturas + boletas + notas
+    if total > 0:
+        pct_facturas = round(facturas / total * 100)
+        pct_boletas = round(boletas / total * 100)
+        pct_notas = 100 - pct_facturas - pct_boletas
+    else:
+        pct_facturas = pct_boletas = pct_notas = 0
+
+    chart_total = total
+    chart_data = {
+        'labels': ['Facturas', 'Boletas', 'Notas de Crédito'],
+        'data': [facturas, boletas, notas],
+        'percentages': [pct_facturas, pct_boletas, pct_notas],
+        'colors': ['#3b82f6', '#22c55e', '#f97316'],
+    }
+
     rechazados_list = qs.filter(estado='RECHAZADO').order_by('-fecha_emision')[:5]
     
     cert_info = get_certificate_info()
@@ -49,6 +70,8 @@ def dashboard_view(request):
         'rechazados_list': rechazados_list,
         'mes_actual': hoy.strftime('%B %Y'),
         'cert_info': cert_info,
+        'chart_data': json.dumps(chart_data),
+        'chart_total': chart_total,
     })
 
 

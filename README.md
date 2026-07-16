@@ -149,4 +149,4 @@ Este proyecto fue desarrollado como **Evidencia de Producto (EP)** para el curso
 Demuestra la capacidad de analizar, modelar y construir un sistema complejo con requerimientos estrictos dictados por una entidad gubernamental (SUNAT), aplicando buenas prácticas de Ingeniería de Software (Arquitectura MVT, Dockerización, Integración de APIs SOAP, y Diseño de Base de Datos Relacional).
 
 ---
-*Desarrollado con ❤️ para la automatización financiera en el Perú.*
+*Desarrollado con mucho para la automatización financiera en el Perú.*
