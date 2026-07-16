@@ -14,6 +14,7 @@ La firma digital es un mock (hash SHA-256 del contenido XML).
 En producción se reemplazaría con una firma real usando certificado digital.
 """
 import logging
+import hashlib
 from decimal import Decimal
 from lxml import etree
 
@@ -337,7 +338,6 @@ def generar_xml_comprobante(comprobante):
         xml_string_firmado = xml_bytes_firmado.decode('utf-8')
         
         # Para el hash_cpe (que va en el QR), extraemos el DigestValue del XML firmado
-        import hashlib
         # Ojo: idealmente el DigestValue se extrae del XML, pero un SHA-256 sirve como fallback de hash
         hash_cpe = hashlib.sha256(xml_bytes_firmado).hexdigest()
         
