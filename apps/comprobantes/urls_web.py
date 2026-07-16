@@ -9,6 +9,7 @@ urlpatterns = [
     path('comprobantes/<int:pk>/', views_web.detalle_comprobante_view, name='comprobante-detalle'),
     path('comprobantes/<int:pk>/pdf/', views_web.pdf_comprobante_view, name='comprobante-pdf'),
     path('comprobantes/<int:pk>/xml/', views_web.descargar_xml_view, name='comprobante-xml'),
+    path('comprobantes/<int:pk>/cdr/', views_web.descargar_cdr_view, name='comprobante-cdr'),
     path('comprobantes/<int:pk>/reenviar/', views_web.reenviar_comprobante_view, name='comprobante-reenviar'),
     path('comprobantes/nota-credito/', views_web.nota_credito_view, name='nota-credito'),
     # Internal search APIs

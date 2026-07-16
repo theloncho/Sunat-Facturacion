@@ -3,6 +3,38 @@
 {% block page_title %}<i class="bi bi-speedometer2 me-2"></i>Dashboard — {{ mes_actual }}{% endblock %}
 
 {% block content %}
+<!-- Cert Widget -->
+{% if cert_info %}
+<div class="row mb-4">
+  <div class="col-12 fade-in-up">
+    <div class="stat-card" style="border-left: 4px solid {% if cert_info.days_left > 30 %}#34d399{% elif cert_info.days_left > 0 %}#fbbf24{% else %}#f87171{% endif %};">
+      <div class="d-flex align-items-center justify-content-between">
+        <div class="d-flex align-items-center">
+          <div class="stat-icon me-3" style="background:rgba(255,255,255,0.05);color:{% if cert_info.days_left > 30 %}#34d399{% elif cert_info.days_left > 0 %}#fbbf24{% else %}#f87171{% endif %}; font-size: 1.5rem; width: 48px; height: 48px;">
+            <i class="bi bi-shield-lock-fill"></i>
+          </div>
+          <div>
+            <h5 class="mb-1" style="color: #f8fafc; font-weight: 600;">Certificado Digital: {{ cert_info.subject }}</h5>
+            {% if cert_info.days_left > 30 %}
+              <p class="mb-0" style="color: #34d399;">El certificado es válido. Vence en {{ cert_info.days_left }} días ({{ cert_info.expires_at|date:"d/m/Y" }}).</p>
+            {% elif cert_info.days_left > 0 %}
+              <p class="mb-0" style="color: #fbbf24;">¡Atención! El certificado caduca en {{ cert_info.days_left }} días ({{ cert_info.expires_at|date:"d/m/Y" }}).</p>
+            {% else %}
+              <p class="mb-0" style="color: #f87171;">¡ALERTA! El certificado ha caducado. No podrá firmar comprobantes a SUNAT.</p>
+            {% endif %}
+          </div>
+        </div>
+        <div>
+          <span class="badge rounded-pill {% if cert_info.days_left > 30 %}bg-success{% elif cert_info.days_left > 0 %}bg-warning text-dark{% else %}bg-danger{% endif %}" style="font-size: 0.9rem; padding: 0.5em 1em;">
+            {% if cert_info.days_left > 30 %}Operativo{% elif cert_info.days_left > 0 %}Por Renovar{% else %}Inválido{% endif %}
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 <!-- Stats Cards -->
 <div class="row g-4 mb-4">
   <div class="col-md-3 col-sm-6 fade-in-up">

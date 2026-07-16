@@ -100,11 +100,11 @@ class Comprobante(ModeloBase):
         ]
 
     def __str__(self):
-        return f"{self.serie}-{self.numero:05d} ({self.get_tipo_display()}) - {self.get_estado_display()}"
+        return f"{self.serie}-{self.numero:08d} ({self.get_tipo_display()}) - {self.get_estado_display()}"
 
     @property
     def serie_numero(self):
-        return f"{self.serie}-{self.numero:05d}"
+        return f"{self.serie}-{self.numero:08d}"
 
 
     @property

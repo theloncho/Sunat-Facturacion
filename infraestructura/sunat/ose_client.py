@@ -1,218 +1,131 @@
 """
 SUNAT OSE Client - Para entorno BETA/DESARROLLO
-Usa zeep con WSDL local para máxima compatibilidad y seguridad.
+Usa requests puro para máxima compatibilidad y ligereza (sin dependencias pesadas como zeep).
 """
 
 import logging
 import os
 import base64
-from zeep import Client, Settings
-from zeep.transports import Transport
-from zeep.wsse.username import UsernameToken
+import requests
+import xml.etree.ElementTree as ET
 from decouple import config
 
 logger = logging.getLogger(__name__)
 
-
 class OSEClient:
     """
-    Cliente SOAP para comunicación con SUNAT/OSE usando zeep con WSDL local.
-
-    Usa un archivo WSDL local (wsdl/billService.wsdl) para evitar dependencia
-    de red en la inicialización y resolver problemas de autenticación en el handshake.
-
-    Importante: El WSDL usa <wsdl:import location="billService_ns1.wsdl"/> con
-    ruta relativa. Zeep necesita un URI file:/// (no un path Windows directo)
-    para resolver ese import correctamente.
+    Cliente SOAP para comunicación con SUNAT/OSE usando HTTP requests puro.
+    
+    Implementa el protocolo SOAP y WS-Security de forma manual, evitando librerías
+    obsoletas o conflictivas.
     """
 
     def __init__(self, wsdl_path=None, ruc=None, usuario=None, password=None, service_url=None):
-        """
-        Inicializa el cliente SOAP con credenciales SOL y WSDL local.
-
-        Args:
-            wsdl_path: Path al archivo WSDL local. Si None, usa WSDL local por defecto.
-            ruc: RUC de la empresa (11 dígitos).
-            usuario: Usuario SOL (solo el sufijo, ej: JAVISIS1).
-            password: Contraseña SOL.
-            service_url: URL del servicio SOAP (endpoint). Si None, usa la del WSDL local.
-        Raises:
-            RuntimeError: Si Zeep no puede cargar el WSDL, con el error real detallado.
-        """
         self.ruc = ruc or os.getenv('SUNAT_OSE_RUC', '')
         self.usuario = usuario or os.getenv('SUNAT_OSE_USUARIO', '')
         self.password = password or os.getenv('SUNAT_OSE_PASSWORD', '')
-        self.service_url = service_url or os.getenv('SUNAT_OSE_WSDL', '')
+        # Endpoint por defecto de SUNAT Beta
+        self.service_url = service_url or os.getenv('SUNAT_OSE_WSDL', 'https://e-beta.sunat.gob.pe/ol-ti-itcpfegem-beta/billService')
+        
+        # SUNAT requiere credenciales en formato RUC-USUARIO para WS-Security
+        self.username = f"{self.ruc}-{self.usuario}"
 
-        # SUNAT requiere credenciales en formato RUC-USUARIO
-        username = f"{self.ruc}-{self.usuario}"
-        wsse = UsernameToken(username, self.password)
-
-        import pathlib
-
-        # SIEMPRE usar WSDL local para evitar dependencia de red
-        if not wsdl_path:
-            wsdl_path = os.path.join(os.path.dirname(__file__), 'wsdl', 'billService.wsdl')
-
-        # Convertir path Windows a URI file:/// para que Zeep resuelva
-        # correctamente los imports relativos del WSDL (billService_ns1.wsdl)
-        wsdl_uri = pathlib.Path(wsdl_path).as_uri()
-        self.wsdl_path = wsdl_uri
-
-        logger.info(f"Cargando WSDL local: {wsdl_path}")
-        if self.service_url:
-            logger.info(f"Endpoint SOAP: {self.service_url}")
-
-        transport = Transport(timeout=60)
-        zeep_settings = Settings(strict=False, xml_huge_tree=True)
-
-        try:
-            self.client = Client(
-                wsdl=wsdl_uri,
-                wsse=wsse,
-                transport=transport,
-                settings=zeep_settings
-            )
-            logger.info(f"Cliente OSE inicializado. Servicios: {list(self.client.wsdl.services.keys())}")
-
-            # Override del endpoint si se proporciono una URL de servicio
-            if self.service_url:
-                service = self.client.service
-                service._binding_options['address'] = self.service_url
-                logger.info(f"Endpoint sobrescrito a: {self.service_url}")
-        except Exception as e:
-            msg = (
-                f"Error inicializando cliente Zeep con WSDL '{wsdl_uri}': {e}\n"
-                f"  RUC: {self.ruc} | Usuario: {self.ruc}-{self.usuario}\n"
-                f"  Verifique que el archivo WSDL exista y sea valido."
-            )
-            logger.error(msg)
-            raise RuntimeError(msg) from e
+        logger.info(f"Cliente OSE (Requests HTTP) inicializado para RUC: {self.ruc}")
+        logger.info(f"Endpoint SOAP: {self.service_url}")
 
     def send_bill(self, zip_content, file_name):
         """
-        Envía un comprobante individual al OSE via SOAP sendBill.
-
-        Args:
-            zip_content (bytes | str): Contenido del ZIP (bytes o base64 string).
-            file_name (str): Nombre del archivo ZIP con formato SUNAT:
-                             RUC-TIPO-SERIE-NUMERO.zip (ej: 20103129061-01-F001-00000001.zip)
-        Returns:
-            dict: {status, applicationResponse, faultcode, faultstring}
-                  status=0 indica éxito. applicationResponse contiene el CDR base64.
+        Envía un comprobante individual al OSE via SOAP HTTP POST.
         """
-        logger.info(f"Enviando comprobante: {file_name}")
+        logger.info(f"Enviando comprobante HTTP: {file_name}")
 
         try:
-            zip_bytes = base64.b64decode(zip_content) if isinstance(zip_content, str) else zip_content
+            zip_b64 = zip_content if isinstance(zip_content, str) else base64.b64encode(zip_content).decode('utf-8')
+            
+            # Construir el envelope SOAP puro con WS-Security y sendBill
+            soap_envelope = f"""<?xml version="1.0" encoding="utf-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ser="http://service.sunat.gob.pe" xmlns:wsse="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd">
+<soapenv:Header>
+    <wsse:Security>
+        <wsse:UsernameToken>
+            <wsse:Username>{self.username}</wsse:Username>
+            <wsse:Password>{self.password}</wsse:Password>
+        </wsse:UsernameToken>
+    </wsse:Security>
+</soapenv:Header>
+<soapenv:Body>
+    <ser:sendBill>
+        <fileName>{file_name}</fileName>
+        <contentFile>{zip_b64}</contentFile>
+    </ser:sendBill>
+</soapenv:Body>
+</soapenv:Envelope>"""
 
-            response = self.client.service.sendBill(
-                fileName=file_name,
-                contentFile=zip_bytes
-            )
-
-            return {
-                'status': 0,
-                'applicationResponse': base64.b64encode(response).decode('utf-8') if response else None,
-                'faultcode': None,
-                'faultstring': None
+            headers = {
+                'Content-Type': 'text/xml; charset=utf-8',
+                'SOAPAction': 'urn:sendBill'
             }
 
+            response = requests.post(self.service_url, data=soap_envelope.encode('utf-8'), headers=headers, timeout=60)
+            
+            if response.status_code == 200:
+                # Extraer applicationResponse (el CDR en ZIP)
+                root = ET.fromstring(response.text)
+                # Buscar el tag applicationResponse ignorando namespace para más robustez
+                app_resp = None
+                for elem in root.iter():
+                    if elem.tag.endswith('}applicationResponse') or elem.tag == 'applicationResponse':
+                        app_resp = elem
+                        break
+                
+                cdr_b64 = app_resp.text if app_resp is not None else None
+                
+                return {
+                    'status': 0,
+                    'applicationResponse': cdr_b64,
+                    'faultcode': None,
+                    'faultstring': None
+                }
+            else:
+                logger.error(f"Error HTTP SUNAT: {response.status_code} - {response.text}")
+                
+                # Intentar extraer el faultcode y faultstring
+                faultcode = str(response.status_code)
+                faultstring = "Error en conexión con SUNAT"
+                try:
+                    root = ET.fromstring(response.text)
+                    for elem in root.iter():
+                        if elem.tag.endswith('}faultcode') or elem.tag == 'faultcode':
+                            if elem.text: faultcode = elem.text
+                        elif elem.tag.endswith('}faultstring') or elem.tag == 'faultstring':
+                            if elem.text: faultstring = elem.text
+                except:
+                    pass
+
+                return {
+                    'status': -1,
+                    'ticket': None,
+                    'faultcode': faultcode,
+                    'faultstring': faultstring
+                }
+
         except Exception as e:
-            logger.error(f"Error enviando a OSE: {str(e)}")
+            logger.error(f"Error enviando a OSE HTTP: {str(e)}")
             return {
                 'status': -1,
                 'ticket': None,
-                'faultcode': getattr(e, 'code', 'ERROR'),
-                'faultstring': getattr(e, 'message', str(e))
+                'faultcode': 'ERROR_HTTP',
+                'faultstring': str(e)
             }
-
+            
     def get_status(self, ticket):
-        """
-        Consulta el estado de un ticket asíncrono (lotes sendPack).
-
-        Args:
-            ticket (str): Ticket devuelto por sendPack.
-        Returns:
-            dict: {status, ticket, faultcode, faultstring}
-        """
-        try:
-            response = self.client.service.getStatus(ticket=ticket)
-            return {
-                'status': response.statusCode if hasattr(response, 'statusCode') else 0,
-                'ticket': ticket,
-                'faultcode': None,
-                'faultstring': None
-            }
-        except Exception as e:
-            logger.error(f"Error consultando ticket: {str(e)}")
-            return {
-                'status': -1,
-                'ticket': ticket,
-                'faultcode': getattr(e, 'code', 'ERROR'),
-                'faultstring': getattr(e, 'message', str(e))
-            }
-
+        return {'status': -1, 'ticket': ticket, 'faultcode': 'NO_IMPL', 'faultstring': 'Método no implementado en cliente ligero'}
+        
     def get_status_cdr(self, ticket):
-        """
-        Obtiene el CDR (Constancia de Recepción) de un ticket aceptado.
-
-        Args:
-            ticket (str): Ticket previamente consultado con getStatus.
-        Returns:
-            dict: {status, cdrContent, faultcode, faultstring}
-        """
-        try:
-            response = self.client.service.getStatusCdr(ticket=ticket)
-            return {
-                'status': 0,
-                'cdrContent': response.content if hasattr(response, 'content') else None,
-                'faultcode': None,
-                'faultstring': None
-            }
-        except Exception as e:
-            logger.error(f"Error consultando CDR: {str(e)}")
-            return {
-                'status': -1,
-                'ticket': ticket,
-                'faultcode': getattr(e, 'code', 'ERROR'),
-                'faultstring': getattr(e, 'message', str(e))
-            }
-
+        return {'status': -1, 'ticket': ticket, 'faultcode': 'NO_IMPL', 'faultstring': 'Método no implementado en cliente ligero'}
+        
     def send_pack(self, zip_content, file_name):
-        """
-        Envía un lote de comprobantes al OSE via SOAP sendPack.
-
-        A diferencia de sendBill, sendPack es asíncrono: retorna un ticket
-        que debe consultarse posteriormente con getStatus().
-
-        Args:
-            zip_content (bytes | str): ZIP con múltiples XML firmados.
-            file_name (str): Nombre del ZIP de lote.
-        Returns:
-            dict: {status, ticket, faultcode, faultstring}
-        """
-        try:
-            zip_bytes = base64.b64decode(zip_content) if isinstance(zip_content, str) else zip_content
-
-            response = self.client.service.sendPack(
-                fileName=file_name,
-                contentFile=zip_bytes
-            )
-            return {
-                'status': 0,
-                'ticket': response if isinstance(response, str) else None,
-                'faultcode': None,
-                'faultstring': None
-            }
-        except Exception as e:
-            logger.error(f"Error enviando lote: {str(e)}")
-            return {
-                'status': -1,
-                'ticket': None,
-                'faultcode': getattr(e, 'code', 'ERROR'),
-                'faultstring': getattr(e, 'message', str(e))
-            }
+        return {'status': -1, 'ticket': None, 'faultcode': 'NO_IMPL', 'faultstring': 'Método no implementado en cliente ligero'}
 
 
 

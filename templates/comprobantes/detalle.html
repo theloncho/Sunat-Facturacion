@@ -95,6 +95,11 @@
         <a href="{% url 'comprobante-xml' comprobante.pk %}" class="btn btn-outline-custom" target="_blank">
           <i class="bi bi-filetype-xml me-2"></i>Descargar XML
         </a>
+        {% if comprobante.estado == 'ACEPTADO' %}
+        <a href="{% url 'comprobante-cdr' comprobante.pk %}" class="btn btn-outline-custom" target="_blank">
+          <i class="bi bi-file-zip me-2"></i>Descargar CDR
+        </a>
+        {% endif %}
         <button onclick="window.print()" class="btn btn-outline-custom">
           <i class="bi bi-printer me-2"></i>Imprimir
         </button>

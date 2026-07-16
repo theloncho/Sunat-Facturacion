@@ -273,7 +273,7 @@ def generar_xml_comprobante(comprobante):
         precio_con_igv = detalle.precio_unitario * (Decimal('1.18') if detalle.producto.afecto_igv else Decimal('1.00'))
         _cbc(alt_price, 'PriceAmount', f'{precio_con_igv:.2f}', currencyID='PEN')
         _cbc(alt_price, 'PriceTypeCode', '01', 
-             listName='SUNAT:Indicador de Tipo de Precio', 
+             listName='Tipo de Precio', 
              listAgencyName='PE:SUNAT', 
              listURI='urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo16')
 
@@ -304,10 +304,10 @@ def generar_xml_comprobante(comprobante):
         # Determinar tipo de afectación
         if detalle.producto.afecto_igv:
             _cbc(line_tax_cat, 'TaxExemptionReasonCode', '10', 
-                 listAgencyName='PE:SUNAT', listName='SUNAT:Codigo de Tipo de Afectación del IGV', listURI='urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo07')
+                 listAgencyName='PE:SUNAT', listName='Afectacion del IGV', listURI='urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo07')
         else:
             _cbc(line_tax_cat, 'TaxExemptionReasonCode', '30', 
-                 listAgencyName='PE:SUNAT', listName='SUNAT:Codigo de Tipo de Afectación del IGV', listURI='urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo07')
+                 listAgencyName='PE:SUNAT', listName='Afectacion del IGV', listURI='urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo07')
 
         line_tax_scheme = _cac(line_tax_cat, 'TaxScheme')
         _cbc(line_tax_scheme, 'ID', '1000' if detalle.producto.afecto_igv else '9998', schemeID='UN/ECE 5153', schemeAgencyID='6')

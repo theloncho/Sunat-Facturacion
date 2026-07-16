@@ -56,6 +56,42 @@ def get_cert_bytes(cert_path=None, cert_password=None):
     with open(resolved, 'rb') as f:
         return f.read(), cert_password
 
+def get_certificate_info():
+    """
+    Lee el certificado digital y retorna su información de caducidad.
+    Útil para el widget del Dashboard.
+    """
+    from cryptography.hazmat.primitives.serialization import pkcs12
+    from cryptography import x509
+    from cryptography.x509.oid import NameOID
+    from datetime import datetime, timezone
+    
+    try:
+        cert_data, cert_password = get_cert_bytes()
+        private_key, certificate, _ = pkcs12.load_key_and_certificates(
+            cert_data,
+            cert_password.encode('utf-8') if cert_password else None
+        )
+        
+        expires_at = certificate.not_valid_after_utc
+        days_left = (expires_at - datetime.now(timezone.utc)).days
+        
+        # Extraer el CN (Common Name)
+        subject = "Desconocido"
+        for attribute in certificate.subject:
+            if attribute.oid == NameOID.COMMON_NAME:
+                subject = attribute.value
+                break
+                
+        return {
+            'valid': days_left > 0,
+            'days_left': days_left,
+            'expires_at': expires_at,
+            'subject': subject
+        }
+    except Exception as e:
+        logger.error(f"Error extrayendo info del certificado: {e}")
+        return None
 
 def sign_xml(xml_content, ruc=None, razon_social=None, empresa_id=None, certificado_id=None):
     """
@@ -81,9 +117,6 @@ def sign_xml(xml_content, ruc=None, razon_social=None, empresa_id=None, certific
     from cryptography.hazmat.primitives.asymmetric import padding
 
     root = etree.fromstring(xml_content)
-
-    cert_data = None
-    cert_password = None
 
     cert_data = None
     cert_password = None

@@ -17,7 +17,7 @@ from infraestructura.persistencia.comprobante_repo import (
     DjangoComprobanteRepository, DjangoNumeracionRepository, DjangoProductoRepository
 )
 from infraestructura.sunat.cliente_ose import DjangoSunatClient
-from infraestructura.sunat.cliente_ose import DjangoSunatClient
+from infraestructura.sunat.firmar import get_certificate_info
 from .pdf_generator import generar_pdf_comprobante
 from apps.clientes.models import Cliente
 from apps.productos.models import Producto
@@ -41,11 +41,14 @@ def dashboard_view(request):
         'pendientes': mes_qs.filter(estado__in=['BORRADOR', 'EMITIDO', 'ENVIADO']).count(),
     }
     rechazados_list = qs.filter(estado='RECHAZADO').order_by('-fecha_emision')[:5]
+    
+    cert_info = get_certificate_info()
 
     return render(request, 'dashboard/index.html', {
         'stats': stats,
         'rechazados_list': rechazados_list,
         'mes_actual': hoy.strftime('%B %Y'),
+        'cert_info': cert_info,
     })
 
 
@@ -212,6 +215,43 @@ def descargar_xml_view(request, pk):
     response['Content-Disposition'] = f'attachment; filename="{comprobante.empresa.ruc}-{comprobante.tipo}-{comprobante.serie_numero}.xml"'
     return response
 
+@login_required
+def descargar_cdr_view(request, pk):
+    """Descargar el CDR (.zip) devuelto por SUNAT."""
+    qs = Comprobante.objects.all()
+    if request.user.empresa:
+        qs = qs.filter(empresa=request.user.empresa)
+    if request.user.is_emisor:
+        qs = qs.filter(creado_por=request.user)
+    
+    comprobante = get_object_or_404(qs, pk=pk)
+    
+    if comprobante.estado != 'ACEPTADO':
+        messages.error(request, 'Este comprobante aún no ha sido aceptado por SUNAT, por lo que no tiene CDR.')
+        return redirect('comprobante-detalle', pk=pk)
+    
+    import os
+    from django.conf import settings
+    
+    TIPO_DOCUMENTO_SUNAT = {
+        'FACTURA': '01',
+        'BOLETA': '03',
+        'NOTA_CREDITO': '07',
+    }
+    tipo_codigo = TIPO_DOCUMENTO_SUNAT.get(comprobante.tipo, '01')
+    zip_file_name = f"R-{comprobante.empresa.ruc}-{tipo_codigo}-{comprobante.serie_numero}.zip"
+    
+    cdr_path = os.path.join(settings.BASE_DIR, 'cdrs', zip_file_name)
+    
+    if not os.path.exists(cdr_path):
+        messages.error(request, 'El archivo CDR físico no se encuentra en el servidor.')
+        return redirect('comprobante-detalle', pk=pk)
+        
+    with open(cdr_path, 'rb') as f:
+        response = HttpResponse(f.read(), content_type='application/zip')
+        response['Content-Disposition'] = f'attachment; filename="{zip_file_name}"'
+        return response
+
 @csrf_exempt
 @login_required
 def nota_credito_view(request):
@@ -286,6 +326,55 @@ def reenviar_comprobante_view(request, pk):
         sunat_client = DjangoSunatClient(comp_repo)
         
         comp_domain = comp_repo.obtener_comprobante_por_id(comprobante.id)
+        
+        # Recalcular totales con el código actual (por si hubo cambios en los impuestos)
+        from dominio.comprobantes.servicios import TributaryEngine
+        detalles_data = []
+        productos_map = {}
+        for det in comp_domain.detalles:
+            detalles_data.append({
+                'producto_id': det.producto_id,
+                'cantidad': det.cantidad,
+                'precio_unitario': det.precio_unitario,
+                'descuento': det.descuento,
+            })
+            productos_map[det.producto_id] = det.producto
+            
+        totales = TributaryEngine.calcular_totales(detalles_data, productos_map)
+        
+        # 1. Actualizar dominio en memoria
+        comp_domain.subtotal = totales['subtotal']
+        comp_domain.total_inafecto = totales['total_inafecto']
+        comp_domain.igv = totales['igv']
+        comp_domain.total = totales['total']
+        
+        # 2. Actualizar base de datos de Django
+        comprobante.subtotal = totales['subtotal']
+        comprobante.total_inafecto = totales['total_inafecto']
+        comprobante.igv = totales['igv']
+        comprobante.total = totales['total']
+        comprobante.save(update_fields=['subtotal', 'total_inafecto', 'igv', 'total'])
+        
+        django_detalles = list(comprobante.detalles.all().order_by('id'))
+        
+        for i, det_dict in enumerate(totales['lineas']):
+            comp_domain.detalles[i].igv_linea = det_dict['igv_linea']
+            comp_domain.detalles[i].subtotal = det_dict['subtotal']
+            
+            django_det = django_detalles[i]
+            django_det.igv_linea = det_dict['igv_linea']
+            django_det.subtotal = det_dict['subtotal']
+            django_det.save(update_fields=['igv_linea', 'subtotal'])
+
+        # 3. Regenerar el XML porque las matemáticas y etiquetas cambiaron
+        xml_str, hash_cpe = sunat_client.generar_xml(comp_domain)
+        comp_domain.xml_firmado = xml_str
+        comp_domain.hash_cpe = hash_cpe
+        
+        comprobante.xml_firmado = xml_str
+        comprobante.hash_cpe = hash_cpe
+        comprobante.save(update_fields=['xml_firmado', 'hash_cpe'])
+
         sunat_client.enviar_comprobante(comp_domain)
         
         messages.success(request, f'Comprobante {comprobante.serie_numero} reenviado. Nuevo estado: {comp_domain.estado}')
